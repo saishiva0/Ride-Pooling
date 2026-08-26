@@ -89,6 +89,7 @@ describe('LocationSearch', () => {
       />,
     );
     await settleAfterTyping(root, 'MG');
+    await new Promise((resolve) => setTimeout(resolve, 0));
     await flushAsync();
     expect(
       root.root.findAll(
@@ -122,6 +123,7 @@ describe('LocationSearch', () => {
       />,
     );
     await settleAfterTyping(root, 'MG Road');
+    await new Promise((resolve) => setTimeout(resolve, 0));
     await flushAsync();
     const text = root.root
       .findAllByType('Text' as never)
