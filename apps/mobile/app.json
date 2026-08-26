@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "RidePool",
+    "slug": "ridepool",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ridepool.app"
+    },
+    "android": {
+      "package": "com.ridepool.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-secure-store",
+      [
+        "react-native-maps",
+        {
+          "androidGoogleMapsApiKey": "process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY",
+          "iosGoogleMapsApiKey": "process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "RidePool uses your location to find nearby rides and set your pickup point."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#FF6B35"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
+      }
+    }
+  }
+}

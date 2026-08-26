@@ -1,0 +1,34 @@
+{
+  "name": "ridepool",
+  "version": "0.1.0",
+  "private": true,
+  "description": "RidePool — connect people already going the same way.",
+  "packageManager": "pnpm@10.12.1",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "husky",
+    "db:init": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev-db.ps1 init",
+    "db:start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev-db.ps1 start",
+    "db:stop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev-db.ps1 stop",
+    "db:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev-db.ps1 status"
+  },
+  "devDependencies": {
+    "eslint": "^9.13.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.2.10",
+    "prettier": "^3.3.3",
+    "turbo": "^2.3.3",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.16.0"
+  }
+}

@@ -1,0 +1,428 @@
+// Prisma schema — Phase 2: Domain Model & Database.
+//
+// Implements the persistent domain model approved in Phase 0
+// (`docs/domain/domain-model.md`, `docs/domain/ride-lifecycle.md`,
+// `docs/domain/pricing-model.md`). No Ride Engine business logic lives here —
+// this is the persistence layer only.
+//
+// Spatial representation: the `Location` model stores authoritative
+// latitude/longitude as Prisma-managed columns. The PostGIS
+// `geometry(Point, 4326)` column (`point`) is added by custom SQL in the
+// migration because Prisma cannot express generated spatial columns or GiST
+// indexes natively. See `migrations/*/migration.sql` and
+// `docs/development/database.md` for details.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [postgis(version: "3.6.2")]
+}
+
+// ---------------------------------------------------------------------------
+// Enums — exact values from Phase 0 documentation (do not invent states).
+// ---------------------------------------------------------------------------
+
+// The approved ride lifecycle contains exactly 7 states
+// (`docs/domain/ride-lifecycle.md` §1).
+enum RideStatus {
+  DRAFT
+  PUBLISHED
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  EXPIRED
+}
+
+// RideRequest lifecycle (`docs/domain/ride-lifecycle.md` §6).
+enum RideRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
+// RideParticipant status (`docs/domain/domain-model.md` §2.4).
+enum ParticipantStatus {
+  CONFIRMED
+  CANCELLED
+}
+
+// Pricing options (`docs/domain/pricing-model.md` §2).
+enum PricingType {
+  STANDARD
+  CUSTOM
+}
+
+// Notification types aligned to the domain event catalogue
+// (`docs/architecture/event-model.md` §2.1).
+enum NotificationType {
+  RIDE_CREATED
+  RIDE_PUBLISHED
+  RIDE_UPDATED
+  RIDE_REQUESTED
+  REQUEST_ACCEPTED
+  REQUEST_REJECTED
+  REQUEST_CANCELLED
+  RIDE_CONFIRMED
+  RIDE_STARTED
+  RIDE_CANCELLED
+  RIDE_COMPLETED
+  RIDE_EXPIRED
+}
+
+// Reasons a user may cite when filing a report (Phase 3.24 — Reporting &
+// Blocking, `docs/planning/phases/phase-3-24.md` §9). No report status/
+// lifecycle field is added in this phase — a report is a single immutable
+// record (§13, DECIDED to omit a moderation workflow: no admin/moderation
+// module exists yet to consume one).
+enum ReportReason {
+  UNSAFE_BEHAVIOR
+  HARASSMENT
+  NO_SHOW
+  FRAUD_OR_SCAM
+  INAPPROPRIATE_CONTENT
+  OTHER
+}
+
+// ---------------------------------------------------------------------------
+// Models
+// ---------------------------------------------------------------------------
+
+// A registered person who creates rides and/or participates in rides
+// (`docs/domain/domain-model.md` §2.1).
+//
+// Authentication credentials are intentionally absent: the auth method is an
+// open decision (OD-005) and auth infrastructure is NOT part of this phase.
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String?  @unique
+  email     String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdRides      Ride[]              @relation("RideCreator")
+  rideRequests      RideRequest[]
+  participations    RideParticipant[]
+  notifications     Notification[]
+  statusChanges     RideStatusHistory[] @relation("StatusChangeActor")
+  sessions          AuthSession[]
+  devicePushTokens  DevicePushToken[]
+  reportsFiled      Report[]            @relation("ReportsFiled")
+  reportsReceived   Report[]            @relation("ReportsReceived")
+  blocksCreated     Block[]             @relation("BlocksCreated")
+  blocksReceived    Block[]             @relation("BlocksReceived")
+}
+
+// Geographic coordinates for ride pickup/destination
+// (`docs/domain/domain-model.md` §2.6, §5).
+//
+// - `latitude` / `longitude` are the authoritative values (Decimal, WGS84).
+// - The PostGIS `point geometry(Point, 4326)` column is a generated column
+//   derived from latitude/longitude; added via custom SQL in the migration.
+// - SRID 4326 per `docs/domain/domain-model.md` §5.2.
+model Location {
+  id        String   @id @default(cuid())
+  latitude  Decimal  @db.Decimal(9, 6)
+  longitude Decimal  @db.Decimal(9, 6)
+  label     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Generated PostGIS point (SRID 4326), derived from latitude/longitude by
+  // the database (`geometry(Point, 4326) GENERATED ALWAYS AS (...) STORED`).
+  // Declared as `Unsupported` so Prisma Migrate stays aware of the column
+  // (preventing drift) without Prisma Client attempting to read or write it
+  // directly; the actual DDL lives in the migration's custom SQL (see
+  // `migrations/*/migration.sql`). The `@default(dbgenerated(...))` and
+  // `@@index(..., type: Gist)` annotations mirror exactly what
+  // `prisma db pull` introspects for this column, so subsequent
+  // `prisma migrate dev` runs see no drift.
+  point Unsupported("geometry")? @default(dbgenerated("st_setsrid(st_makepoint((longitude)::double precision, (latitude)::double precision), 4326)"))
+
+  pickupRides      Ride[] @relation("RidePickupLocation")
+  destinationRides Ride[] @relation("RideDestinationLocation")
+
+  @@index([point], type: Gist)
+}
+
+// A published journey with capacity to share
+// (`docs/domain/domain-model.md` §2.2, `docs/domain/ride-engine.md` §4).
+//
+// - `pricePerKm` preserves the creator-selected price (₹4 for STANDARD, or a
+//   validated CUSTOM value). Range validation (₹2–6, standard rate) is a
+//   config-driven business rule enforced by the Ride Engine (Phase 3), not a
+//   database trigger — see `docs/domain/pricing-model.md` §6–§7.
+// - `estimatedDistanceKm` / `estimatedContribution` are computed by the future
+//   business layer (distance provider = OD-007); columns exist for persistence.
+// - `vehicleType` / `discoveryRadiusKm` are optional per the domain model;
+//   exact vehicle list and radius thresholds are OD-001/OD-003/OD-004.
+model Ride {
+  id                    String      @id @default(cuid())
+  creatorId             String
+  pickupLocationId      String
+  destinationLocationId String
+  departureDateTime     DateTime
+  totalSeats            Int
+  vehicleType           String?
+  discoveryRadiusKm     Float?
+  pricingType           PricingType
+  pricePerKm            Decimal     @db.Decimal(6, 2)
+  estimatedDistanceKm   Decimal?    @db.Decimal(8, 2)
+  estimatedContribution Decimal?    @db.Decimal(10, 2)
+  status                RideStatus  @default(DRAFT)
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+
+  creator             User     @relation("RideCreator", fields: [creatorId], references: [id])
+  pickupLocation      Location @relation("RidePickupLocation", fields: [pickupLocationId], references: [id])
+  destinationLocation Location @relation("RideDestinationLocation", fields: [destinationLocationId], references: [id])
+
+  requests      RideRequest[]
+  participants  RideParticipant[]
+  statusHistory RideStatusHistory[]
+  notifications Notification[]
+  reports       Report[]
+
+  // Query patterns (see `docs/domain/ride-engine.md` §4.4 discovery):
+  // - creator's rides (creatorId)
+  // - active-status filtering (status; status + departure window)
+  @@index([creatorId])
+  @@index([status])
+  @@index([departureDateTime])
+  @@index([status, departureDateTime])
+  @@index([pickupLocationId])
+  @@index([destinationLocationId])
+}
+
+// A participant's request to join a ride
+// (`docs/domain/domain-model.md` §2.3, `docs/domain/ride-lifecycle.md` §6).
+//
+// Duplicate active requests are prevented by a partial unique index on
+// (rideId, userId) WHERE status IN ('PENDING','ACCEPTED') added in the
+// migration (`docs/domain/ride-engine.md` §6 — duplicate request race).
+model RideRequest {
+  id             String            @id @default(cuid())
+  rideId         String
+  userId         String
+  requestedSeats Int               @default(1)
+  status         RideRequestStatus @default(PENDING)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  resolvedAt     DateTime?
+
+  ride Ride @relation(fields: [rideId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  participant   RideParticipant?
+  notifications Notification[]
+
+  // - requests for a ride (creator inbox)
+  // - a user's requests
+  // - active requests for a ride
+  @@index([rideId])
+  @@index([userId])
+  @@index([rideId, status])
+  @@index([status])
+}
+
+// A participant confirmed on a ride (result of an accepted request)
+// (`docs/domain/domain-model.md` §2.4).
+//
+// One participant row per originating request (requestId @unique). Duplicate
+// confirmed participation is prevented by a partial unique index on
+// (rideId, userId) WHERE status = 'CONFIRMED' in the migration.
+model RideParticipant {
+  id             String            @id @default(cuid())
+  rideId         String
+  userId         String
+  requestId      String            @unique
+  seatsAllocated Int
+  status         ParticipantStatus @default(CONFIRMED)
+  joinedAt       DateTime          @default(now())
+  cancelledAt    DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  ride    Ride        @relation(fields: [rideId], references: [id])
+  user    User        @relation(fields: [userId], references: [id])
+  request RideRequest @relation(fields: [requestId], references: [id])
+
+  // - confirmed participants of a ride (seat accounting)
+  // - rides a user participates in
+  @@index([rideId])
+  @@index([userId])
+}
+
+// Append-only audit of ride state transitions
+// (`docs/domain/domain-model.md` §2.5). The state machine itself belongs to
+// Phase 3 (Ride Engine); this model only persists history.
+model RideStatusHistory {
+  id              String      @id @default(cuid())
+  rideId          String
+  fromStatus      RideStatus?
+  toStatus        RideStatus
+  changedByUserId String?
+  reason          String?
+  createdAt       DateTime    @default(now())
+
+  ride      Ride  @relation(fields: [rideId], references: [id])
+  changedBy User? @relation("StatusChangeActor", fields: [changedByUserId], references: [id])
+
+  // chronological history per ride
+  @@index([rideId, createdAt])
+  @@index([rideId])
+}
+
+// Record of a notification sent to a user (in-app at minimum, V1)
+// (`docs/domain/domain-model.md` §2.7). Delivery/push provider (OD-008) is
+// NOT part of this phase.
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String?
+  body      String?
+  readAt    DateTime?
+  rideId    String?
+  requestId String?
+  createdAt DateTime         @default(now())
+
+  user    User         @relation(fields: [userId], references: [id])
+  ride    Ride?        @relation(fields: [rideId], references: [id])
+  request RideRequest? @relation(fields: [requestId], references: [id])
+
+  // - a user's notification list
+  // - unread badge (userId + readAt)
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@index([rideId])
+  @@index([requestId])
+}
+
+// An authenticated phone+OTP session (OD-005 — resolved Phase 3.18).
+//
+// The client holds an opaque bearer token; this table stores ONLY a SHA-256
+// hash of that token (`tokenHash`, `@unique`) so a token leak cannot be
+// replayed against the database. Sessions are revoked server-side on logout
+// (`revokedAt`) and rejected once `expiresAt` passes. There is deliberately
+// no refresh token in V1.
+model AuthSession {
+  id         String   @id @default(cuid())
+  userId     String
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  // - a user's sessions (logout-all, cleanup)
+  // - expiry sweeps (revocation of expired sessions)
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// A device push token for Expo Notifications (Phase 3.23).
+//
+// Supports multiple devices per user, Android/iOS platforms, Expo push token
+// storage, active state, and last seen tracking. Tokens belong to authenticated
+// users — userId is NEVER accepted from the client. The composite unique
+// constraint on (userId, token) ensures idempotent registration. The unique
+// index on token alone allows lookup by token for deactivation.
+model DevicePushToken {
+  id          String   @id @default(cuid())
+  userId      String
+  token       String   @unique
+  platform    String   // "android" | "ios"
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lastSeenAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  // - a user's device tokens (registration, lookup, deactivation)
+  // - active tokens for push dispatch
+  // - token deduplication per user (idempotent registration)
+  @@unique([userId, token])
+  @@index([userId])
+  @@index([userId, isActive])
+}
+
+// A user-filed report against another user, optionally scoped to a specific
+// ride (Phase 3.24 — Reporting & Blocking, `docs/planning/phases/phase-3-24.md`
+// §9). Reports are never auto-adjudicated by this phase — no admin/
+// moderation tooling exists in V1 (`docs/architecture/module-boundaries.md`
+// §4.8, Admin = FUTURE), so `Report` has no status/lifecycle field.
+//
+// Eligibility (who may report whom) is a ride-co-participant check spanning
+// `Ride`/`RideParticipant` — it cannot be expressed as a single-column FK or
+// CHECK constraint, so it is enforced at the application layer (Product
+// owner decision, 2026-08-21), not here.
+//
+// The 5-per-rolling-24h report rate limit (Product owner decision,
+// 2026-08-21) is a tunable application config constant, not a schema/table
+// concept — enforced by counting this user's recent rows via the
+// (reporterId, createdAt) index below.
+model Report {
+  id         String       @id @default(cuid())
+  reporterId String
+  reportedId String
+  rideId     String?
+  reason     ReportReason
+  detail     String?
+  createdAt  DateTime     @default(now())
+
+  reporter User  @relation("ReportsFiled", fields: [reporterId], references: [id])
+  reported User  @relation("ReportsReceived", fields: [reportedId], references: [id])
+  ride     Ride? @relation(fields: [rideId], references: [id])
+
+  // - a user's filed reports (self-service history, GET /reports/mine)
+  // - reports naming a given user (future admin/moderation use, not built here)
+  // - the rolling 24h report-rate-limit count (Product owner decision,
+  //   2026-08-21 — 5 reports / rolling 24h, enforced in application code)
+  @@index([reporterId])
+  @@index([reporterId, createdAt])
+  @@index([reportedId])
+  @@index([rideId])
+}
+
+// A one-directional block: blockerId blocks blockedId (Phase 3.24 —
+// Reporting & Blocking, `docs/planning/phases/phase-3-24.md` §9).
+//
+// Idempotent via the unique constraint on (blockerId, blockedId): re-blocking
+// while already actively blocked is a no-op; re-blocking after an unblock
+// reactivates the same row (clears `unblockedAt`) rather than erroring or
+// duplicating (§13).
+//
+// Unblocking is a SOFT DELETE (Product owner decision, 2026-08-21):
+// `unblockedAt` null = active block; non-null = resolved/inactive. The row is
+// never deleted, so a full block/unblock history per pair is retained.
+//
+// Blocking does NOT auto-cancel any existing CONFIRMED `RideParticipant`
+// between the two users (Product owner decision, 2026-08-21, §13) — it only
+// affects future discovery/matching and new ride requests, enforced by the
+// `ride` module reading this table (never the reverse).
+model Block {
+  id          String    @id @default(cuid())
+  blockerId   String
+  blockedId   String
+  createdAt   DateTime  @default(now())
+  unblockedAt DateTime?
+
+  blocker User @relation("BlocksCreated", fields: [blockerId], references: [id])
+  blocked User @relation("BlocksReceived", fields: [blockedId], references: [id])
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
+  @@index([blockerId, unblockedAt]) // "my active blocks" query (GET /blocks/mine)
+}

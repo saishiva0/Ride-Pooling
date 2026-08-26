@@ -1,0 +1,6 @@
+* text=auto eol=lf
+
+# Batch / shell scripts stay as-is
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.sh text eol=lf

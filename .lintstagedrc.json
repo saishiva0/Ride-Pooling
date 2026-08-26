@@ -1,0 +1,4 @@
+{
+  "$schema": "https://json.schemastore.org/lint-staged",
+  "*.{ts,tsx,js,jsx,json,md,yml,yaml}": ["prettier --write"]
+}

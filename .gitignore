@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+.turbo/
+*.tsbuildinfo
+
+# Environment (never commit real secrets)
+.env
+.env.local
+.env.*.local
+.env.production
+.env.test
+
+# Expo / React Native
+apps/mobile/.expo/
+apps/mobile/web-build/
+apps/mobile/dist/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+apps/mobile/.expo-shared/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+logs/
+
+# Test / coverage
+coverage/
+.nyc_output/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Local database data (dev cluster)
+.local/
