@@ -12,11 +12,28 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  DATABASE_URL: postgresql://ridepool:ridepool_dev@localhost:5433/ridepool?schema=public
+
 jobs:
   quality-gate:
     name: Lint, typecheck, test, build
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ridepool
+          POSTGRES_PASSWORD: ridepool_dev
+          POSTGRES_DB: ridepool
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U ridepool -d ridepool"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -54,6 +71,9 @@ jobs:
 
       - name: Typecheck
         run: pnpm typecheck
+
+      - name: Apply database migrations
+        run: pnpm --filter @ridepool/backend exec prisma migrate deploy
 
       - name: Test
         run: pnpm test
