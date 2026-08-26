@@ -24,18 +24,15 @@ export function ChatScreen({ rideId }: ChatScreenProps) {
   }, [api, rideId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
-
   useEffect(() => {
     let unsubscribe = () => {};
     try {
       unsubscribe = realtimeClient.subscribe('CHAT_MESSAGE_CREATED', (event: RealtimeEvent) => {
-        if (event.rideId !== rideId || event.data.recipientUserId === userId) return;
-        void refresh();
+        if (event.rideId === rideId) void refresh();
       });
     } catch { /* REST remains authoritative when realtime is unavailable. */ }
     return unsubscribe;
-  }, [realtimeClient, refresh, rideId, userId]);
-
+  }, [realtimeClient, refresh, rideId]);
   useEffect(() => { void api.markRead(rideId); }, [api, rideId]);
 
   const send = useCallback(async () => {
@@ -77,17 +74,12 @@ export function ChatScreen({ rideId }: ChatScreenProps) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  messages: { flex: 1 },
-  messageList: { gap: spacing.sm, paddingVertical: spacing.md },
+  container: { flex: 1 }, messages: { flex: 1 }, messageList: { gap: spacing.sm, paddingVertical: spacing.md },
   bubble: { alignSelf: 'flex-start', maxWidth: '85%', padding: spacing.sm, borderRadius: 12, backgroundColor: colors.surface },
-  mine: { alignSelf: 'flex-end', backgroundColor: colors.accentSoft },
-  message: { color: colors.textPrimary },
+  mine: { alignSelf: 'flex-end', backgroundColor: colors.surface }, message: { color: colors.textPrimary },
   time: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
   composer: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-end', paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border },
   input: { flex: 1, minHeight: 44, maxHeight: 120, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.sm, color: colors.textPrimary },
-  send: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: 8, backgroundColor: colors.accent },
-  sendText: { color: colors.background, fontWeight: '600' },
-  error: { color: colors.danger, marginBottom: spacing.sm },
-  muted: { color: colors.textSecondary, paddingVertical: spacing.sm },
+  send: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: 8, backgroundColor: colors.accent }, sendText: { color: colors.background, fontWeight: '600' },
+  error: { color: colors.danger, marginBottom: spacing.sm }, muted: { color: colors.textSecondary, paddingVertical: spacing.sm },
 });
