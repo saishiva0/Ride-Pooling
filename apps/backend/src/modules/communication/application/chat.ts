@@ -10,8 +10,7 @@ import type { RealtimeEvent } from '../../realtime/domain/realtime-events.js';
 
 function assertEligible(ride: Awaited<ReturnType<typeof findChatAccess>>, userId: string) {
   if (!ride) throw new NotFoundError('Ride not found');
-  const eligible = ride.creatorId === userId || ride.participants.some((p) => p.userId === userId);
-  if (!eligible) throw new AuthorizationError('You are not a participant in this ride');
+  if (ride.creatorId !== userId && !ride.participants.some((p) => p.userId === userId)) throw new AuthorizationError('You are not a participant in this ride');
   return ride;
 }
 function assertActive(status: RideStatus): void { if (!canChatInRide(status)) throw new BusinessRuleError('Chat is closed for this ride'); }
@@ -48,12 +47,13 @@ export async function sendRideChatMessage(input: { rideId: string; userId: strin
 export async function markRideChatRead(input: { rideId: string; userId: string; readAt?: Date }) {
   const result = await prisma.$transaction(async (tx) => {
     const ride = assertEligible(await findChatAccess(tx, input), input);
-    const conversation = await ensureRideChat(tx, { rideId: input.rideId });
+    const conversation = await tx.chatConversation.findUnique({ where: { rideId: input.rideId }, select: { id: true } });
+    if (!conversation) return { rideId: ride.id, conversationId: null, lastReadAt: null };
     const readAt = input.readAt ?? new Date();
     const state = await markRead(tx, { conversationId: conversation.id, userId: input.userId, readAt });
     return { rideId: ride.id, conversationId: conversation.id, lastReadAt: state.lastReadAt };
   });
-  await getEventPublisher().publish([{ eventId: randomUUID(), type: 'CHAT_READ_UPDATED', occurredAt: result.lastReadAt.toISOString(), rideId: input.rideId, requestId: null, recipientUserId: input.userId, data: { conversationId: result.conversationId, lastReadAt: result.lastReadAt.toISOString() } }]);
+  if (result.conversationId && result.lastReadAt) await getEventPublisher().publish([{ eventId: randomUUID(), type: 'CHAT_READ_UPDATED', occurredAt: result.lastReadAt.toISOString(), rideId: input.rideId, requestId: null, recipientUserId: input.userId, data: { conversationId: result.conversationId, lastReadAt: result.lastReadAt.toISOString() } }]);
   return result;
 }
 
