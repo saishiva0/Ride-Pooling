@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { RideStatus } from '@prisma/client';
 import { prisma } from '../../../lib/prisma.js';
 import { AuthorizationError, BusinessRuleError, InternalError, NotFoundError, ValidationError } from '../../../lib/errors.js';
 import { findActiveBlockBetween } from '../../safety/infrastructure/block.repository.js';
@@ -13,10 +14,7 @@ function assertEligible(ride: Awaited<ReturnType<typeof findChatAccess>>, userId
   if (!eligible) throw new AuthorizationError('You are not a participant in this ride');
   return ride;
 }
-
-function assertActive(status: Awaited<ReturnType<typeof findChatAccess>> extends infer T ? NonNullable<T>['status'] : never): void {
-  if (!canChatInRide(status)) throw new BusinessRuleError('Chat is closed for this ride');
-}
+function assertActive(status: RideStatus): void { if (!canChatInRide(status)) throw new BusinessRuleError('Chat is closed for this ride'); }
 
 export async function getRideChat(input: { rideId: string; userId: string }) {
   return prisma.$transaction(async (tx) => {
@@ -38,16 +36,12 @@ export async function sendRideChatMessage(input: { rideId: string; userId: strin
     if (blocked) throw new AuthorizationError('Chat is unavailable because an active block exists');
     const conversation = await ensureRideChat(tx, { rideId: input.rideId });
     const message = await createMessage(tx, { conversationId: conversation.id, senderId: input.userId, text });
-    await tx.notification.createMany({ data: participantIds.map((userId) => ({ userId, type: 'CHAT_MESSAGE', title: 'New chat message', body: 'You have a new message in your ride chat', rideId: input.rideId })) });
+    await tx.notification.createMany({ data: participantIds.map((userId) => ({ userId, type: 'CHAT_MESSAGE' as const, title: 'New chat message', body: 'You have a new message in your ride chat', rideId: input.rideId })) });
     return { ride, message };
   });
-
   const recipients = [result.ride.creatorId, ...result.ride.participants.map((p) => p.userId)].filter((id) => id !== input.userId);
   const occurredAt = result.message.createdAt.toISOString();
-  await getEventPublisher().publish(recipients.map((recipientUserId): RealtimeEvent => ({
-    eventId: randomUUID(), type: 'CHAT_MESSAGE_CREATED', occurredAt, rideId: input.rideId, requestId: null, recipientUserId,
-    data: { messageId: result.message.id, conversationId: result.message.conversationId, senderId: result.message.senderId, text: result.message.text },
-  })));
+  await getEventPublisher().publish(recipients.map((recipientUserId): RealtimeEvent => ({ eventId: randomUUID(), type: 'CHAT_MESSAGE_CREATED', occurredAt, rideId: input.rideId, requestId: null, recipientUserId, data: { messageId: result.message.id, conversationId: result.message.conversationId, senderId: result.message.senderId, text: result.message.text } })));
   return result.message;
 }
 
@@ -69,10 +63,7 @@ export async function reportRideChatMessage(input: { rideId: string; messageId: 
     const message = await findMessageForReport(tx, input.messageId);
     if (!message || message.conversation.rideId !== ride.id) throw new NotFoundError('Chat message not found');
     if (message.senderId === input.userId) throw new BusinessRuleError('You cannot report your own message');
-    try {
-      return await tx.report.create({ data: { reporterId: input.userId, reportedId: message.senderId, rideId: ride.id, reason: 'INAPPROPRIATE_CONTENT', detail: input.detail?.trim() || `Chat message ${message.id}` }, select: { id: true, createdAt: true } });
-    } catch (err) {
-      throw new InternalError('Failed to report chat message', { cause: err });
-    }
+    try { return await tx.report.create({ data: { reporterId: input.userId, reportedId: message.senderId, rideId: ride.id, reason: 'INAPPROPRIATE_CONTENT', detail: input.detail?.trim() || `Chat message ${message.id}` }, select: { id: true, createdAt: true } }); }
+    catch (err) { throw new InternalError('Failed to report chat message', { cause: err }); }
   });
 }
