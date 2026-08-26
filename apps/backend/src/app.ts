@@ -27,31 +27,16 @@ import {
 import { createNotificationRouter } from './modules/notification/http/notification.routes.js';
 import { createDeviceTokenRouter } from './modules/notification/http/device-token.routes.js';
 import { createSafetyRouter } from './modules/safety/http/safety.routes.js';
+import { createChatRouter } from './modules/communication/http/chat.routes.js';
 import type { Express } from 'express';
 
 export interface AppOptions {
   config: AppConfig;
   logger: Logger;
-  /**
-   * HTTP authentication seam (Phase 3.10). OD-005 is resolved (Phase 3.18):
-   * the default authenticator reads `Authorization: Bearer <opaque token>`
-   * and resolves it through the session service. Tests/development may inject
-   * an explicit authenticator (e.g. `createTestAuthenticator`) — never
-   * enabled implicitly.
-   */
   authenticator?: HttpAuthenticator;
-  /**
-   * Injectable auth dependencies (Phase 3.18). Defaults to the real MSG91
-   * provider + Prisma session store; tests inject a fake OTP provider and/or
-   * an in-memory session service.
-   */
   authDeps?: Partial<AuthDependencies>;
 }
 
-/**
- * Application factory. Keeps the Express app separate from the HTTP server so
- * it can be reused in tests.
- */
 export function createApp(options: AppOptions): Express {
   const { config, logger } = options;
   const app = express();
@@ -65,14 +50,8 @@ export function createApp(options: AppOptions): Express {
   }
 
   app.use(requestContext(logger));
-
-  // Health is intentionally outside the versioned business API.
   app.use(healthRouter());
 
-  // Phase 3.10: the /api/v1 business boundary. One auth middleware built from
-  // the configured authenticator guards every business endpoint; routers stay
-  // free of authentication logic. Phase 3.18 (OD-005 resolved): the default
-  // authenticator is the real bearer-token one.
   const authDeps = {
     ...createDefaultAuthDependencies(config),
     ...options.authDeps,
@@ -85,9 +64,6 @@ export function createApp(options: AppOptions): Express {
     API_BASE_PATH,
     createRideRouter({
       requireAuth,
-      // OD-004 (resolved Phase 3.19): matching thresholds and the result cap
-      // are server-controlled product policy built from central config —
-      // never from callers.
       matchingConfig: matchingConfigurationFromConfig(config),
       matchingMaxResults: matchingMaxResultsFromConfig(config),
     }),
@@ -95,6 +71,7 @@ export function createApp(options: AppOptions): Express {
   app.use(API_BASE_PATH, createNotificationRouter({ requireAuth }));
   app.use(API_BASE_PATH, createDeviceTokenRouter({ requireAuth }));
   app.use(API_BASE_PATH, createSafetyRouter({ requireAuth }));
+  app.use(API_BASE_PATH, createChatRouter({ requireAuth }));
   app.use(API_BASE_PATH, createAuthRouter({ requireAuth, deps: authDeps }));
 
   app.use(notFoundHandler);
