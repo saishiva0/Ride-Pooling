@@ -18,10 +18,7 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         projectService: {
-          allowDefaultProject: [
-            'apps/backend/vitest.config.ts',
-            'apps/backend/prisma/seed.ts',
-          ],
+          allowDefaultProject: ['apps/backend/vitest.config.ts'],
         },
       },
     },
