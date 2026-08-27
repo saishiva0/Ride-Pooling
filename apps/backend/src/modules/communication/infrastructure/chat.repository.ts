@@ -29,14 +29,22 @@ export async function findRideChat(
     },
   });
   if (!ride) return null;
-  const eligible = ride.creatorId === params.userId || ride.participants.some((p) => p.userId === params.userId);
+  const eligible =
+    ride.creatorId === params.userId ||
+    ride.participants.some((p) => p.userId === params.userId);
   if (!eligible) return { ride, eligible: false, conversation: null };
 
   const conversation = await tx.chatConversation.findUnique({
     where: { rideId: params.rideId },
     include: {
-      messages: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], select: CHAT_MESSAGE_SELECT },
-      readStates: { where: { userId: params.userId }, select: { lastReadAt: true } },
+      messages: {
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        select: CHAT_MESSAGE_SELECT,
+      },
+      readStates: {
+        where: { userId: params.userId },
+        select: { lastReadAt: true },
+      },
     },
   });
   return { ride, eligible: true, conversation };
@@ -63,7 +71,10 @@ export async function findChatAccess(
       id: true,
       status: true,
       creatorId: true,
-      participants: { where: { status: 'CONFIRMED' }, select: { userId: true } },
+      participants: {
+        where: { status: 'CONFIRMED' },
+        select: { userId: true },
+      },
     },
   });
 }
@@ -84,7 +95,11 @@ export async function findMessageForReport(
 ) {
   return tx.chatMessage.findUnique({
     where: { id: messageId },
-    select: { id: true, senderId: true, conversation: { select: { rideId: true } } },
+    select: {
+      id: true,
+      senderId: true,
+      conversation: { select: { rideId: true } },
+    },
   });
 }
 
@@ -93,8 +108,17 @@ export async function markRead(
   params: { conversationId: string; userId: string; readAt: Date },
 ) {
   return tx.chatReadState.upsert({
-    where: { conversationId_userId: { conversationId: params.conversationId, userId: params.userId } },
-    create: { conversationId: params.conversationId, userId: params.userId, lastReadAt: params.readAt },
+    where: {
+      conversationId_userId: {
+        conversationId: params.conversationId,
+        userId: params.userId,
+      },
+    },
+    create: {
+      conversationId: params.conversationId,
+      userId: params.userId,
+      lastReadAt: params.readAt,
+    },
     update: { lastReadAt: params.readAt },
   });
 }

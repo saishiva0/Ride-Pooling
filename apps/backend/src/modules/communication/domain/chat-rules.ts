@@ -1,7 +1,10 @@
 import { RideStatus } from '@prisma/client';
 
 export const CHAT_MESSAGE_MAX_LENGTH = 2000;
-export const CHAT_OPEN_RIDE_STATUSES = [RideStatus.CONFIRMED, RideStatus.IN_PROGRESS] as const;
+export const CHAT_OPEN_RIDE_STATUSES = [
+  RideStatus.CONFIRMED,
+  RideStatus.IN_PROGRESS,
+] as const;
 
 export function canChatInRide(status: RideStatus): boolean {
   return (CHAT_OPEN_RIDE_STATUSES as readonly RideStatus[]).includes(status);

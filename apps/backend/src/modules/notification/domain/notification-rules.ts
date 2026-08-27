@@ -12,7 +12,10 @@ export const SUPPORTED_NOTIFICATION_TYPES: readonly NotificationType[] = [
 ];
 
 export function isNotificationType(value: unknown): value is NotificationType {
-  return typeof value === 'string' && (Object.values(NotificationType) as string[]).includes(value);
+  return (
+    typeof value === 'string' &&
+    (Object.values(NotificationType) as string[]).includes(value)
+  );
 }
 
 export function isSupportedNotificationType(type: NotificationType): boolean {
