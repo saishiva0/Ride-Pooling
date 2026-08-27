@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 20
     services:
       postgres:
-        image: postgres:16
+        image: postgres:16-3.5
         env:
           POSTGRES_USER: ridepool
           POSTGRES_PASSWORD: ridepool_dev
