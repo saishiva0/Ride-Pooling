@@ -13,7 +13,8 @@
       "dependsOn": ["^lint"]
     },
     "test": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
+      "env": ["DATABASE_URL"]
     },
     "typecheck": {
       "dependsOn": ["^build"]
