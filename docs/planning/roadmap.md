@@ -45,44 +45,40 @@ documented; no code written.
 
 > Audit record. The 3.x track implements the Phase 1/2 engineering work as a
 > series of incremental, independently verified phases. It does not replace or
-> modify the Phase 0/1/2 roadmap above; phase labels 3.1–3.16 and 3.18–3.19
+> modify the Phase 0/1/2 roadmap above; phase labels 3.1–3.16 and 3.18–3.25
 > exist only in the per-phase notes under `docs/development/`.
 
-- **Completed:** Phases 3.1–3.16 and 3.18–3.24. Latest verified state (Phase 3.24):
-  backend 1039/1039 tests passing, mobile 444/444 tests passing, and every
-  other gate green (typecheck, lint, build, `format:check`, `prisma validate`,
-  `prisma migrate status`, `db:check`, `expo config`). The two failures carried
-  as "pre-existing and unrelated" through Phase 3.23 are resolved: the Ride
-  Engine history-count assertion was corrected in Phase 3.24 (the extra
-  `RideStatusHistory` row is the legitimate first-accept transition, so the
-  test — not the code — was wrong), and the `location-search` flake did not
-  reproduce. **OD-005 (authentication mechanism) is RESOLVED**
-  (phone + OTP via MSG91, backend-owned verification, opaque bearer sessions);
-  **OD-004 (matching thresholds) is RESOLVED** (5 km pickup radius, ±60 min
-  departure window, 5 km destination tolerance, no score, deterministic
-  ranking, max 20 results, server-controlled config); **OD-007 (map provider)
-  is RESOLVED** (Google Maps, Phase 3.20); **OD-008 (realtime transport +
-  push provider) is fully RESOLVED** (Socket.io, Phase 3.22; Expo Notifications
-  - Expo Push Service, Phase 3.23). OD-010 remains OPEN. **OD-009 (ride
-    chat/communication) is RESOLVED** as V1.1 (documentation-only scope decision;
-    no V1 Chat implementation).
-    See `docs/development/phase-3-*-notes.md`.
+- **Completed:** Phases 3.1–3.16 and 3.18–3.25. Latest verified state includes
+  Reporting & Blocking (3.24) and Chat / Communication (3.25, V1.1 scope), with
+  the applicable backend/mobile quality gates passing. OD-005 authentication,
+  OD-004 matching thresholds, OD-007 Google Maps, OD-008 Socket.io + Expo Push
+  Service, and OD-009 Chat scope are resolved. OD-010 identity verification and
+  OD-013 retention remain open.
 - **Proposed (NOT approved):** Phase 3.17 — Mobile Ride Creator Flow
-  (create → publish → my rides → active ride → history). Spec pending approval:
+  (create → publish → my rides → active ride → history). The scope is
+  canonical V1 capability, but sequencing/approval remains pending:
   `docs/planning/phases/phase-3-17.md`.
-- **Completed:** Phase 3.24 — Reporting & Blocking. Narrowed from the original
-  "Verification & Safety" concept to reporting and blocking only; identity
-  verification is explicitly deferred to a future, OD-010-dependent phase.
-  This narrowing did not resolve OD-010. Spec:
-  `docs/planning/phases/phase-3-24.md`; notes:
-  `docs/development/phase-3-24-notes.md`.
-- **Deferred to V1.1:** Phase 3.25 — Chat / Communication. OD-009 is RESOLVED
-  as V1.1. No Chat implementation is part of V1. Planning placeholder:
-  `docs/planning/phases/phase-3-25.md`.
-- Open decision OD-010 must not be resolved by any implementation phase
-  without an explicit decision. Phase 3.24's scope narrowing (reporting &
-  blocking only) does not resolve OD-010; identity verification remains
-  deferred pending it.
+- **Completed / deferred:** Phase 3.26 — Payments discovery concluded
+  **BLOCKED / NOT APPLICABLE TO V1**. Payment processing, wallets and payouts
+  remain post-V1; no implementation is authorized by this phase.
+  Discovery report: `docs/development/phase-3-26-payments-discovery-report.md`.
+- **Completed / deferred:** Phase 3.27 — Offline & Reliability discovery
+  concluded **BLOCKED / NOT APPLICABLE TO V1**. The existing V1 reliability
+  contract is online degradation/reconnect + REST recovery; an offline sync
+  engine, outbox/event replay and offline writes are post-V1. No implementation
+  is authorized by this phase.
+- **Next planning gate:** Before implementing any future feature, reconcile
+  the proposed Phase 3.17 specification with decisions resolved after it was
+  authored. In particular, do not reopen or invent decisions already resolved
+  by Phases 3.18–3.25.
+- **OD-010 gate:** Identity verification remains a separate open decision and
+  must be investigated before any verification implementation is authorized.
+
+## Future / Post-V1
+
+- Phase 3.26 — Payments: post-V1.
+- Phase 3.27 — Offline sync engine / outbox / event replay: post-V1.
+- Other V1.1/V2 items remain subject to their documented product decisions.
 
 ## Future (ideas, not committed)
 
@@ -104,5 +100,5 @@ crypto/blockchain. See `docs/product/v1-scope.md`.
 | `v1-definition-of-done.md`               | V1 completion criteria    |
 | `open-decisions.md`                      | Decisions blocking phases |
 | `risk-register.md`                       | Risks by phase            |
-| `../product/v1-scope.md`                 | V1 scope                  |
+| `../product/v1-scope.md`                 | Scope in/out              |
 | `../architecture/technical-decisions.md` | ADRs driving foundation   |
