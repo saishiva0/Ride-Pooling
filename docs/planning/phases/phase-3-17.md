@@ -148,6 +148,7 @@ No migration is authorized merely to make implementation convenient.
 ## 10. Testing and quality gates
 
 Backend:
+
 - unit/domain/use-case tests;
 - PostgreSQL integration tests for lifecycle persistence/history;
 - HTTP tests for validation, authorization, envelopes and transitions;
@@ -155,12 +156,14 @@ Backend:
 - Prisma validate/migrate status and DB check.
 
 Mobile:
+
 - API/render/navigation tests for create, publish, My Rides, start, complete
   and history;
 - typecheck, lint and test;
 - Expo config validation.
 
 Repository-wide:
+
 - `format:check`;
 - `git diff --check`.
 
