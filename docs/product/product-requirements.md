@@ -163,8 +163,7 @@ Full spec: `docs/domain/domain-model.md` (Location) and
 ## 14. Notifications Requirements
 
 - Ride request, accepted, rejected, reminder, cancellation, state changes.
-- Delivered in-app (real-time) at minimum; push provider = open decision
-  (OD-008).
+- Delivered in-app (real-time) at minimum; push delivery uses **Expo Notifications / Expo Push Service**, resolved by OD-008 in Phase 3.23.
 
 ## 15. Safety Requirements
 
