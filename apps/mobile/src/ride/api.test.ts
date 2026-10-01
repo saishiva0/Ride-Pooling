@@ -5,11 +5,15 @@ import {
   acceptedRideRequestDto,
   cancelledRideDto,
   cancelledRideRequestDto,
+  completedRideDto,
   createdRideDto,
   createdRideRequestDto,
+  creatorRideDto,
   discoveredRideDto,
   matchedRideDto,
   notificationDto,
+  publishedRideDto,
+  startedRideDto,
 } from '../../tests/fixtures';
 
 /** A deterministic fake client that records calls and resolves per-path. */
@@ -235,6 +239,66 @@ describe('RideApi', () => {
     expect(calls[0].path).toBe('/rides/ride-1/cancel');
     expect(calls[0].options?.method).toBe('POST');
     expect(result.status).toBe('CANCELLED');
+  });
+
+  it('lists the creator rides at GET /rides/mine', async () => {
+    const { client, calls } = fakeClient({
+      '/rides/mine': [creatorRideDto()],
+    });
+    const api = createRideApi(client);
+    const rides = await api.listMyRides();
+    expect(calls[0].path).toBe('/rides/mine');
+    expect(calls[0].options?.method).toBeUndefined(); // GET
+    expect(rides[0].id).toBe('ride-1');
+    expect(rides[0].availableSeats).toBe(3);
+    expect(rides[0].departureDateTime).toBeInstanceOf(Date);
+  });
+
+  it('fetches a creator ride detail at GET /rides/:rideId', async () => {
+    const { client, calls } = fakeClient({
+      '/rides/ride-1': creatorRideDto({ status: 'DRAFT' }),
+    });
+    const api = createRideApi(client);
+    const ride = await api.getRideDetail('ride-1');
+    expect(calls[0].path).toBe('/rides/ride-1');
+    expect(ride.status).toBe('DRAFT');
+    expect(ride.availableSeats).toBe(3);
+  });
+
+  it('publishes a ride at POST /rides/:rideId/publish', async () => {
+    const { client, calls } = fakeClient({
+      '/rides/ride-1/publish': publishedRideDto(),
+    });
+    const api = createRideApi(client);
+    const result = await api.publishRide({ rideId: 'ride-1' });
+    expect(calls[0].path).toBe('/rides/ride-1/publish');
+    expect(calls[0].options?.method).toBe('POST');
+    expect(result.status).toBe('PUBLISHED');
+    expect(result.publishedAt).toBeInstanceOf(Date);
+  });
+
+  it('starts a ride at POST /rides/:rideId/start', async () => {
+    const { client, calls } = fakeClient({
+      '/rides/ride-1/start': startedRideDto(),
+    });
+    const api = createRideApi(client);
+    const result = await api.startRide({ rideId: 'ride-1' });
+    expect(calls[0].path).toBe('/rides/ride-1/start');
+    expect(calls[0].options?.method).toBe('POST');
+    expect(result.status).toBe('IN_PROGRESS');
+    expect(result.startedAt).toBeInstanceOf(Date);
+  });
+
+  it('completes a ride at POST /rides/:rideId/complete', async () => {
+    const { client, calls } = fakeClient({
+      '/rides/ride-1/complete': completedRideDto(),
+    });
+    const api = createRideApi(client);
+    const result = await api.completeRide({ rideId: 'ride-1' });
+    expect(calls[0].path).toBe('/rides/ride-1/complete');
+    expect(calls[0].options?.method).toBe('POST');
+    expect(result.status).toBe('COMPLETED');
+    expect(result.completedAt).toBeInstanceOf(Date);
   });
 
   it('lists notifications at GET /notifications without a limit', async () => {
