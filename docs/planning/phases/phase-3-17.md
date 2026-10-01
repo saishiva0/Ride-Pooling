@@ -1,6 +1,7 @@
 # Phase 3.17 — Mobile Ride Creator Flow
 
-> Status: **PROPOSED — for approval. NOT implemented.**
+> Status: **IMPLEMENTED** — approved and built (see
+> `docs/development/phase-3-17-notes.md` for the verification record).
 >
 > This planning artifact defines the V1 Creator-side marketplace flow using
 > current repository requirements and decisions. It does not authorize any
@@ -180,6 +181,7 @@ No existing test may be weakened or deleted.
    verification evidence.
 7. The final report explicitly stops before starting another phase.
 
-**Approval gate:** This document remains **PROPOSED** until explicitly
-approved. Implementation must not begin solely because this specification has
-been reconciled.
+**Approval gate (resolved):** This document was explicitly approved as the
+next implementation track and is now **IMPLEMENTED**. Implementation remained
+within the scope defined here. No open decision was resolved or reinterpreted
+by the implementation.

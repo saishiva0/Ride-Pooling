@@ -48,16 +48,21 @@ documented; no code written.
 > modify the Phase 0/1/2 roadmap above; phase labels 3.1–3.16 and 3.18–3.25
 > exist only in the per-phase notes under `docs/development/`.
 
-- **Completed:** Phases 3.1–3.16 and 3.18–3.25. Latest verified state includes
-  Reporting & Blocking (3.24) and Chat / Communication (3.25, V1.1 scope), with
-  the applicable backend/mobile quality gates passing. OD-005 authentication,
+- **Completed:** Phases 3.1–3.17 and 3.18–3.25. Latest verified state includes
+  the Mobile Ride Creator Flow (3.17), Reporting & Blocking (3.24) and Chat /
+  Communication (3.25, V1.1 scope), with the applicable backend/mobile quality
+  gates passing. Backend 90 files / 1040 tests and mobile 62 files / 472 tests
+  pass as of Phase 3.17. OD-005 authentication,
   OD-004 matching thresholds, OD-007 Google Maps, OD-008 Socket.io + Expo Push
   Service, and OD-009 Chat scope are resolved. OD-010 identity verification and
   OD-013 retention remain open.
-- **Proposed (NOT approved):** Phase 3.17 — Mobile Ride Creator Flow
-  (create → publish → my rides → active ride → history). The scope is
-  canonical V1 capability, but sequencing/approval remains pending:
-  `docs/planning/phases/phase-3-17.md`.
+- **Completed:** Phase 3.17 — Mobile Ride Creator Flow
+  (create → publish → my rides → active ride → history). The creator-side
+  V1 marketplace loop is implemented and verified on the backend (publish/
+  start/complete + creator list/detail reads) and mobile (create, my rides,
+  active ride, history). No schema change; no open decision resolved. Spec:
+  `docs/planning/phases/phase-3-17.md`; notes:
+  `docs/development/phase-3-17-notes.md`.
 - **Completed / deferred:** Phase 3.26 — Payments discovery concluded
   **BLOCKED / NOT APPLICABLE TO V1**. Payment processing, wallets and payouts
   remain post-V1; no implementation is authorized by this phase.
@@ -68,9 +73,10 @@ documented; no code written.
   engine, outbox/event replay and offline writes are post-V1. No implementation
   is authorized by this phase.
 - **Next planning gate:** Before implementing any future feature, reconcile
-  the proposed Phase 3.17 specification with decisions resolved after it was
-  authored. In particular, do not reopen or invent decisions already resolved
-  by Phases 3.18–3.25.
+  its specification with decisions resolved after it was authored. In
+  particular, do not reopen or invent decisions already resolved by Phases
+  3.18–3.25. (The Phase 3.17 specification has been reconciled and
+  implemented.)
 - **OD-010 gate:** Identity verification remains a separate open decision and
   must be investigated before any verification implementation is authorized.
 

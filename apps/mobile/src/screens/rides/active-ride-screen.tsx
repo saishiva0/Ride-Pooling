@@ -1,9 +1,10 @@
 /**
  * Active Ride screen (Phase 3.17 — MOBILE RIDE CREATOR FLOW).
  *
- * For rides in PUBLISHED, CONFIRMED, or IN_PROGRESS state.
- * Creator can start (→ IN_PROGRESS) and complete (→ COMPLETED) the ride.
- * Uses POST /api/v1/rides/:rideId/start and POST /api/v1/rides/:rideId/complete.
+ * For rides in DRAFT, PUBLISHED, CONFIRMED, or IN_PROGRESS state.
+ * Creator can publish a DRAFT (→ PUBLISHED), start (→ IN_PROGRESS), and
+ * complete (→ COMPLETED) the ride. Uses POST /api/v1/rides/:rideId/publish,
+ * POST /api/v1/rides/:rideId/start and POST /api/v1/rides/:rideId/complete.
  *
  * Identity: none is read or sent — the backend derives it from auth headers.
  */
@@ -16,7 +17,12 @@ import type { AppNavigation } from '../../navigation/app-navigator';
 import { ROUTES } from '../../navigation/routes';
 import { formatDateTime, formatPricePerKm } from '../../ride/format';
 import type { RideApi } from '../../ride/api';
-import type { CreatorRide, StartedRide, CompletedRide } from '../../ride/types';
+import type {
+  CreatorRide,
+  PublishedRide,
+  StartedRide,
+  CompletedRide,
+} from '../../ride/types';
 import { colors, spacing, typography } from '../../theme';
 
 export interface ActiveRideScreenProps {
@@ -25,6 +31,7 @@ export interface ActiveRideScreenProps {
   rideApi: RideApi;
 }
 
+const PUBLISHABLE_STATUSES = ['DRAFT'] as const;
 const STARTABLE_STATUSES = ['PUBLISHED', 'CONFIRMED'] as const;
 const COMPLETABLE_STATUSES = ['IN_PROGRESS'] as const;
 
@@ -34,6 +41,9 @@ export function ActiveRideScreen({
   rideApi,
 }: ActiveRideScreenProps) {
   const [ride, setRide] = useState<CreatorRide | null>(null);
+  const [publishedRide, setPublishedRide] = useState<PublishedRide | null>(
+    null,
+  );
   const [startedRide, setStartedRide] = useState<StartedRide | null>(null);
   const [completedRide, setCompletedRide] = useState<CompletedRide | null>(
     null,
@@ -44,6 +54,12 @@ export function ActiveRideScreen({
     [rideId, rideApi],
   );
   const { state: loadState, run: runLoad } = useAsync(loadRide);
+
+  const publishOperation = useCallback(
+    async () => rideApi.publishRide({ rideId }),
+    [rideId, rideApi],
+  );
+  const { state: publishState, run: runPublish } = useAsync(publishOperation);
 
   const startOperation = useCallback(
     async () => rideApi.startRide({ rideId }),
@@ -65,6 +81,13 @@ export function ActiveRideScreen({
   }, [loadState]);
 
   useEffect(() => {
+    if (publishState.status === 'success') {
+      setPublishedRide(publishState.data);
+      void runLoad();
+    }
+  }, [publishState, runLoad]);
+
+  useEffect(() => {
     if (startState.status === 'success') {
       setStartedRide(startState.data);
       void runLoad();
@@ -82,6 +105,11 @@ export function ActiveRideScreen({
     void runLoad();
   }, [runLoad]);
 
+  const canPublish =
+    ride !== null &&
+    PUBLISHABLE_STATUSES.includes(
+      ride.status as (typeof PUBLISHABLE_STATUSES)[number],
+    );
   const canStart =
     ride !== null &&
     STARTABLE_STATUSES.includes(
@@ -138,6 +166,13 @@ export function ActiveRideScreen({
       </Text>
       <Text style={styles.detail}>Status: {ride.status}</Text>
 
+      {publishedRide !== null && (
+        <Text style={styles.confirmation}>
+          Ride published at {formatDateTime(publishedRide.publishedAt)}. Status:{' '}
+          {publishedRide.status}
+        </Text>
+      )}
+
       {startedRide !== null && (
         <Text style={styles.confirmation}>
           Ride started at {formatDateTime(startedRide.startedAt)}. Status:{' '}
@@ -156,6 +191,27 @@ export function ActiveRideScreen({
         <Text style={styles.confirmation}>
           This ride is completed. View it in Ride History.
         </Text>
+      )}
+
+      {canPublish && !isInProgress && !isCompleted && (
+        <>
+          <Text style={styles.section}>Publish Ride</Text>
+          {publishState.status === 'error' && (
+            <ErrorView error={publishState.error} />
+          )}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Publish ride"
+            onPress={() => void runPublish()}
+            style={styles.publishButton}
+          >
+            {publishState.status === 'loading' ? (
+              <LoadingView label="Publishing…" />
+            ) : (
+              <Text style={styles.publishLabel}>Publish ride</Text>
+            )}
+          </Pressable>
+        </>
       )}
 
       {canStart && !isInProgress && !isCompleted && (
@@ -200,11 +256,15 @@ export function ActiveRideScreen({
         </>
       )}
 
-      {!canStart && !canComplete && !isInProgress && !isCompleted && (
-        <Text style={styles.note}>
-          No actions available for this ride in its current state.
-        </Text>
-      )}
+      {!canPublish &&
+        !canStart &&
+        !canComplete &&
+        !isInProgress &&
+        !isCompleted && (
+          <Text style={styles.note}>
+            No actions available for this ride in its current state.
+          </Text>
+        )}
 
       <Pressable
         accessibilityRole="button"
@@ -251,6 +311,17 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.textSecondary,
     marginTop: spacing.lg,
+  },
+  publishButton: {
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    borderRadius: 4,
+    backgroundColor: colors.accent,
+    marginTop: spacing.sm,
+  },
+  publishLabel: {
+    color: colors.background,
+    fontWeight: '600',
   },
   startButton: {
     alignItems: 'center',

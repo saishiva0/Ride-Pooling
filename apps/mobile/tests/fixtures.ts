@@ -21,11 +21,15 @@ import type {
   AcceptedRideRequestDto,
   CancelledRideDto,
   CancelledRideRequestDto,
+  CompletedRideDto,
   CreatedRideDto,
   CreatedRideRequestDto,
+  CreatorRideDto,
   DiscoveredRideDto,
   MatchedRideDto,
   NotificationDto,
+  PublishedRideDto,
+  StartedRideDto,
 } from '../src/ride/api.types';
 import type {
   AcceptedRideRequest,
@@ -108,6 +112,49 @@ export function createdRideDto(
     status: 'DRAFT',
     createdAt: ISO_STRING,
     updatedAt: ISO_STRING,
+    ...overrides,
+  };
+}
+
+export function creatorRideDto(
+  overrides: Partial<CreatorRideDto> = {},
+): CreatorRideDto {
+  return {
+    ...createdRideDto(),
+    availableSeats: 3,
+    ...overrides,
+  };
+}
+
+export function publishedRideDto(
+  overrides: Partial<PublishedRideDto> = {},
+): PublishedRideDto {
+  return {
+    rideId: 'ride-1',
+    status: 'PUBLISHED',
+    publishedAt: ISO_STRING,
+    ...overrides,
+  };
+}
+
+export function startedRideDto(
+  overrides: Partial<StartedRideDto> = {},
+): StartedRideDto {
+  return {
+    rideId: 'ride-1',
+    status: 'IN_PROGRESS',
+    startedAt: ISO_STRING,
+    ...overrides,
+  };
+}
+
+export function completedRideDto(
+  overrides: Partial<CompletedRideDto> = {},
+): CompletedRideDto {
+  return {
+    rideId: 'ride-1',
+    status: 'COMPLETED',
+    completedAt: ISO_STRING,
     ...overrides,
   };
 }

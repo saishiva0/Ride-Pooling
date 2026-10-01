@@ -59,7 +59,10 @@ export function MyRidesScreen({ navigation, rideApi }: MyRidesScreenProps) {
     }
   };
 
+  // DRAFT is included: a draft still needs a creator action (publish), so it
+  // opens the same creator action screen as the other pre-completion states.
   const isActive = (status: CreatorRide['status']): boolean =>
+    status === 'DRAFT' ||
     status === 'PUBLISHED' ||
     status === 'CONFIRMED' ||
     status === 'IN_PROGRESS';
@@ -159,7 +162,9 @@ export function MyRidesScreen({ navigation, rideApi }: MyRidesScreenProps) {
           >
             <Text style={styles.viewLabel}>
               {isActive(ride.status)
-                ? 'Active Ride'
+                ? ride.status === 'DRAFT'
+                  ? 'Manage Ride'
+                  : 'Active Ride'
                 : isCompleted(ride.status)
                   ? 'View History'
                   : 'View Details'}
