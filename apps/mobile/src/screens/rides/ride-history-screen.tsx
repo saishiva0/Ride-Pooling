@@ -1,8 +1,11 @@
 /**
- * Ride History screen (Phase 3.17 — MOBILE RIDE CREATOR FLOW).
+ * Ride History screen (Phase 3.17 — MOBILE RIDE CREATOR FLOW; V1 rider read
+ * path).
  *
- * Lists the authenticated creator's completed rides (COMPLETED status).
- * Reuses GET /api/v1/rides/mine and filters for COMPLETED rides.
+ * Lists the authenticated user's completed rides (COMPLETED status): the
+ * rides they created (GET /api/v1/rides/mine) and the rides they joined as a
+ * confirmed participant (GET /api/v1/rides/joined). Both are
+ * server-authoritative, so participant history survives an app restart.
  *
  * Identity: none is read or sent — the backend derives it from auth headers.
  */
@@ -24,13 +27,36 @@ export interface RideHistoryScreenProps {
   rideApi: RideApi;
 }
 
+/** Merges creator and participant rides, de-duplicating by ride id. */
+function mergeRides(
+  created: readonly CreatorRide[],
+  joined: readonly CreatorRide[],
+): CreatorRide[] {
+  const byId = new Map<string, CreatorRide>();
+  for (const ride of created) {
+    byId.set(ride.id, ride);
+  }
+  for (const ride of joined) {
+    if (!byId.has(ride.id)) {
+      byId.set(ride.id, ride);
+    }
+  }
+  return [...byId.values()];
+}
+
 export function RideHistoryScreen({
   navigation,
   rideApi,
 }: RideHistoryScreenProps) {
   const [rides, setRides] = useState<readonly CreatorRide[]>([]);
 
-  const operation = useCallback(async () => rideApi.listMyRides(), [rideApi]);
+  const operation = useCallback(async () => {
+    const [created, joined] = await Promise.all([
+      rideApi.listMyRides(),
+      rideApi.listJoinedRides(),
+    ]);
+    return mergeRides(created, joined);
+  }, [rideApi]);
   const { state, run } = useAsync(operation);
 
   useEffect(() => {

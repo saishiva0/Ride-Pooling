@@ -1,23 +1,20 @@
 /**
- * My requests screen (Phase 3.15 — MOBILE RIDE PARTICIPANT FLOW; Phase 3.21 —
- * REQUEST & PARTICIPANT LIFECYCLE COMPLETION).
+ * My requests screen (V1 rider read path; Phase 3.15/3.21 origin).
  *
- * Lists the requests the current session has created, with their last-known
- * status. This is deliberately session-local (see `request-store.ts`): the
- * backend exposes request creation, decisions, and notifications but NO
- * "list my requests" endpoint, so there is no server-side list to render.
- * The backend remains authoritative for request state; acceptance/rejection
- * outcomes surface through the Notifications tab. Documented limitation.
+ * Server-authoritative: on load it fetches the authenticated participant's own
+ * requests from `GET /api/v1/rides/requests/mine` and renders the persisted
+ * state. The former session-local request store is no longer the source of
+ * truth, so My Requests survives an app restart.
  *
- * Phase 3.21 adds the participant's own lifecycle actions via
- * POST /api/v1/rides/:rideId/requests/:requestId/cancel (`ride-lifecycle.md`
- * §4.2): a PENDING request can be WITHDRAWN and an ACCEPTED participation can
- * be CANCELLED (seat released; last participant reverts the ride to
- * PUBLISHED). Each action calls the API and, on success, reports the request
- * id through `onCancelled` so the owner (the navigator's request store) can
- * reflect the new CANCELLED status.
+ * Phase 3.21 lifecycle actions are preserved: a PENDING request can be
+ * WITHDRAWN and an ACCEPTED participation CANCELLED via
+ * `POST /api/v1/rides/:rideId/requests/:requestId/cancel`; on success the list
+ * is reloaded from the backend and the request id is reported through
+ * `onCancelled` so any remaining UI cache can reflect it.
+ *
+ * Identity: none is read or sent — the backend derives it from auth headers.
  */
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ErrorView } from '../../components/error-view';
 import { EmptyView } from '../../components/empty-view';
@@ -27,19 +24,40 @@ import type { AppNavigation } from '../../navigation/app-navigator';
 import { ROUTES } from '../../navigation/routes';
 import type { RideApi } from '../../ride/api';
 import { formatDateTime } from '../../ride/format';
-import type { StoredRequest } from '../../ride/request-store';
+import type {
+  CreatorRide,
+  ParticipantRideRequest,
+  RideSummary,
+} from '../../ride/types';
 import { colors, spacing, typography } from '../../theme';
 
 export interface MyRequestsScreenProps {
   navigation: AppNavigation;
-  requests: readonly StoredRequest[];
-  /** The typed API seam for the participant's lifecycle actions. */
+  /** The typed API seam for loading requests and lifecycle actions. */
   rideApi: RideApi;
   /** Called with the request id after it was successfully cancelled. */
   onCancelled?: (requestId: string) => void;
 }
 
-function locationLabel(request: StoredRequest): string {
+/** Presents a creator/participant ride as a `RideSummary` for the details
+ * screen (distance is not part of the participant read contract). */
+function toRideSummary(ride: CreatorRide): RideSummary {
+  return {
+    id: ride.id,
+    creator: ride.creator,
+    pickupLocation: ride.pickupLocation,
+    destinationLocation: ride.destinationLocation,
+    departureDateTime: ride.departureDateTime,
+    totalSeats: ride.totalSeats,
+    availableSeats: ride.availableSeats,
+    pricingType: ride.pricingType,
+    pricePerKm: ride.pricePerKm,
+    distanceMeters: 0,
+    status: ride.status,
+  };
+}
+
+function locationLabel(request: ParticipantRideRequest): string {
   const pickup =
     request.ride.pickupLocation.label ??
     `${request.ride.pickupLocation.latitude}, ${request.ride.pickupLocation.longitude}`;
@@ -51,52 +69,66 @@ function locationLabel(request: StoredRequest): string {
 
 /** Whether the request is still open to a participant-initiated cancellation
  * (PENDING withdrawal or ACCEPTED participation cancellation — §4.2). */
-function isCancellable(request: StoredRequest): boolean {
-  return request.status === 'PENDING' || request.status === 'ACCEPTED';
+function isCancellable(request: ParticipantRideRequest): boolean {
+  return (
+    request.request.status === 'PENDING' ||
+    request.request.status === 'ACCEPTED'
+  );
 }
 
-function actionLabel(request: StoredRequest): string {
-  return request.status === 'ACCEPTED' ? 'Cancel participation' : 'Withdraw';
+function actionLabel(request: ParticipantRideRequest): string {
+  return request.request.status === 'ACCEPTED'
+    ? 'Cancel participation'
+    : 'Withdraw';
 }
 
 interface RequestCardProps {
-  request: StoredRequest;
+  item: ParticipantRideRequest;
   navigation: AppNavigation;
   rideApi: RideApi;
-  onCancelled?: (requestId: string) => void;
+  /**
+   * True once this request was cancelled this session (survives the reload),
+   * with the status it held at cancellation to pick the confirmation copy.
+   */
+  cancelledWasAccepted?: boolean;
+  onCancelled: (requestId: string, wasAccepted: boolean) => void;
 }
 
 function RequestCard({
-  request,
+  item,
   navigation,
   rideApi,
+  cancelledWasAccepted,
   onCancelled,
 }: RequestCardProps) {
+  const request = item.request;
+  const cancelled = cancelledWasAccepted !== undefined;
   const operation = useCallback(async () => {
+    const wasAccepted = request.status === 'ACCEPTED';
     const result = await rideApi.cancelRequest({
       rideId: request.rideId,
       requestId: request.id,
     });
-    onCancelled?.(request.id);
+    onCancelled(request.id, wasAccepted);
     return result;
-  }, [rideApi, request.rideId, request.id, onCancelled]);
+  }, [rideApi, request.rideId, request.id, request.status, onCancelled]);
   const { state, run } = useAsync(operation);
-  const cancelled = state.status === 'success';
 
   return (
     <View style={styles.card}>
-      <Text style={styles.route}>{locationLabel(request)}</Text>
+      <Text style={styles.route}>{locationLabel(item)}</Text>
       <Text style={styles.detail}>
         {formatDateTime(request.createdAt)} · {request.requestedSeats} seat
         {request.requestedSeats === 1 ? '' : 's'}
       </Text>
       <Text style={styles.detail}>Status: {request.status}</Text>
+      <Text style={styles.detail}>Ride status: {item.ride.status}</Text>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="View ride"
         onPress={() =>
           navigation.navigate(ROUTES.RIDE_DETAILS, {
-            ride: request.ride,
+            ride: toRideSummary(item.ride),
           })
         }
         style={styles.viewButton}
@@ -104,19 +136,19 @@ function RequestCard({
         <Text style={styles.viewLabel}>View ride</Text>
       </Pressable>
 
-      {isCancellable(request) && !cancelled && (
+      {isCancellable(item) && !cancelled && (
         <>
           {state.status === 'error' && <ErrorView error={state.error} />}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={actionLabel(request)}
+            accessibilityLabel={actionLabel(item)}
             onPress={() => void run()}
             style={styles.cancelButton}
           >
             {state.status === 'loading' ? (
-              <LoadingView label="Cancelling…" />
+              <LoadingView label="Cancelling..." />
             ) : (
-              <Text style={styles.cancelLabel}>{actionLabel(request)}</Text>
+              <Text style={styles.cancelLabel}>{actionLabel(item)}</Text>
             )}
           </Pressable>
         </>
@@ -124,7 +156,7 @@ function RequestCard({
 
       {cancelled && (
         <Text style={styles.confirmation}>
-          {request.status === 'ACCEPTED'
+          {cancelledWasAccepted
             ? 'Participation cancelled — your seat was released.'
             : 'Request withdrawn.'}
         </Text>
@@ -135,10 +167,57 @@ function RequestCard({
 
 export function MyRequestsScreen({
   navigation,
-  requests,
   rideApi,
   onCancelled,
 }: MyRequestsScreenProps) {
+  const [requests, setRequests] = useState<readonly ParticipantRideRequest[]>(
+    [],
+  );
+  const [cancelled, setCancelled] = useState<ReadonlyMap<string, boolean>>(
+    () => new Map(),
+  );
+
+  const operation = useCallback(
+    async () => rideApi.listMyRequests(),
+    [rideApi],
+  );
+  const { state, run } = useAsync(operation);
+
+  useEffect(() => {
+    if (state.status === 'success') {
+      setRequests(state.data);
+    }
+  }, [state]);
+
+  useEffect(() => {
+    void run();
+  }, [run]);
+
+  const handleCancelled = useCallback(
+    (requestId: string, wasAccepted: boolean) => {
+      setCancelled((prev) => new Map(prev).set(requestId, wasAccepted));
+      onCancelled?.(requestId);
+      void run();
+    },
+    [onCancelled, run],
+  );
+
+  if (state.status === 'loading') {
+    return (
+      <ScrollView>
+        <LoadingView label="Loading your requests..." />
+      </ScrollView>
+    );
+  }
+
+  if (state.status === 'error') {
+    return (
+      <ScrollView>
+        <ErrorView error={state.error} onRetry={run} />
+      </ScrollView>
+    );
+  }
+
   if (requests.length === 0) {
     return (
       <ScrollView>
@@ -150,16 +229,16 @@ export function MyRequestsScreen({
   return (
     <ScrollView>
       <Text style={styles.note}>
-        Requests you have made in this session. Outcomes appear in
-        Notifications.
+        Your ride requests. Outcomes are loaded from the server.
       </Text>
-      {requests.map((request) => (
+      {requests.map((item) => (
         <RequestCard
-          key={request.id}
-          request={request}
+          key={item.request.id}
+          item={item}
           navigation={navigation}
           rideApi={rideApi}
-          onCancelled={onCancelled}
+          cancelledWasAccepted={cancelled.get(item.request.id)}
+          onCancelled={handleCancelled}
         />
       ))}
     </ScrollView>

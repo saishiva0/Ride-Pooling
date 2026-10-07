@@ -134,11 +134,30 @@ export interface CompletedRide {
   completedAt: Date;
 }
 
-/** A ride as seen by its creator (GET /rides/mine, GET /rides/:rideId): the
- * full created-ride shape plus live seat availability. */
+/** A ride as seen by the authenticated user (GET /rides/mine, GET /rides/joined,
+ * GET /rides/:rideId): the full created-ride shape plus live seat availability.
+ * Served to a creator for their own rides and to a confirmed participant for a
+ * joined ride (V1 rider read path). */
 export interface CreatorRide extends CreatedRide {
   /** totalSeats − CONFIRMED participants' allocated seats (never negative). */
   availableSeats: number;
+}
+
+/** The participant's own request (GET /rides/requests/mine). */
+export interface MyRideRequest {
+  id: string;
+  rideId: string;
+  requestedSeats: number;
+  status: RideRequestStatusValue;
+  createdAt: Date;
+  resolvedAt: Date | null;
+}
+
+/** A participant's own request plus the requested ride — the server-authoritative
+ * row for the My Requests screen (GET /rides/requests/mine). */
+export interface ParticipantRideRequest {
+  request: MyRideRequest;
+  ride: CreatorRide;
 }
 
 /** Input for the deterministic matching capability (POST /api/v1/rides/match).

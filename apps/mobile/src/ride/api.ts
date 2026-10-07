@@ -30,6 +30,7 @@ import type {
   MatchedRideDto,
   NotificationDto,
   NotificationListResultDto,
+  ParticipantRideRequestDto,
   PublishedRideDto,
   RejectedRideRequestDto,
   StartedRideDto,
@@ -45,6 +46,7 @@ import {
   mapMatchedRide,
   mapNotification,
   mapNotificationList,
+  mapParticipantRideRequest,
   mapPublishedRide,
   mapRejectedRideRequest,
   mapRideRequest,
@@ -59,6 +61,7 @@ import type {
   CreatorRide,
   MatchRidesInput,
   MatchedRide,
+  ParticipantRideRequest,
   PublishedRide,
   RejectedRideRequest,
   RideCreationInput,
@@ -113,7 +116,22 @@ export interface RideApi {
   /** GET /api/v1/rides/mine — the authenticated creator's rides. */
   listMyRides(): Promise<CreatorRide[]>;
 
-  /** GET /api/v1/rides/:rideId — creator's ride detail. */
+  /**
+   * GET /api/v1/rides/requests/mine — the authenticated participant's own
+   * requests (server-authoritative My Requests source).
+   */
+  listMyRequests(): Promise<ParticipantRideRequest[]>;
+
+  /**
+   * GET /api/v1/rides/joined — rides the authenticated user is a CONFIRMED
+   * participant of (server-authoritative participant ride visibility).
+   */
+  listJoinedRides(): Promise<CreatorRide[]>;
+
+  /**
+   * GET /api/v1/rides/:rideId — the ride detail, readable by the creator or a
+   * CONFIRMED participant.
+   */
   getRideDetail(rideId: string): Promise<CreatorRide>;
 
   /** POST /api/v1/rides/:rideId/requests — the user requests seats. */
@@ -205,6 +223,14 @@ function completePath(rideId: string): string {
 
 function myRidesPath(): string {
   return `${RIDES_PATH}/mine`;
+}
+
+function myRequestsPath(): string {
+  return `${RIDES_PATH}/requests/mine`;
+}
+
+function joinedRidesPath(): string {
+  return `${RIDES_PATH}/joined`;
 }
 
 function rideDetailPath(rideId: string): string {
@@ -326,6 +352,17 @@ export function createRideApi(client: ApiClient): RideApi {
 
     async listMyRides() {
       const rides = await client.request<CreatorRideDto[]>(myRidesPath());
+      return rides.map(mapCreatorRide);
+    },
+
+    async listMyRequests() {
+      const requests =
+        await client.request<ParticipantRideRequestDto[]>(myRequestsPath());
+      return requests.map(mapParticipantRideRequest);
+    },
+
+    async listJoinedRides() {
+      const rides = await client.request<CreatorRideDto[]>(joinedRidesPath());
       return rides.map(mapCreatorRide);
     },
 

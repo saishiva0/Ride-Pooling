@@ -10,9 +10,9 @@
  * Responsibilities:
  * - Renders the top-level tabs (Discover / My Requests / Notifications) and
  *   pushes RideDetails on top of the stack with a back affordance.
- * - Owns the session-local request store (see `request-store.ts`) so the "My
- *   Requests" screen reflects requests created this session (the backend has
- *   no request-list endpoint — documented limitation).
+ * - "My Requests" is server-authoritative (see `my-requests-screen.tsx`):
+ *   it loads the participant's persisted requests from the backend, so it
+ *   survives an app restart. No session-local store is authoritative.
  * - Builds the default `RideApi` over the generic client with the auth
  *   headers provider from the auth context (Phase 3.18 — real bearer session).
  *   Tests inject a mock `RideApi`.
@@ -41,9 +41,8 @@ import { createDefaultLocationDependencies } from '../location/create-default-lo
 import type { GeocodingProvider } from '../location/geocoding';
 import type { LocationClient } from '../location/location-client';
 import type { RoutingProvider } from '../location/routing';
-import { createRequestStore, type StoredRequest } from '../ride/request-store';
 import { createRideApi, type RideApi } from '../ride/api';
-import type { RideRequest, RideSummary } from '../ride/types';
+import type { RideSummary } from '../ride/types';
 import { createSafetyApi, type SafetyApi } from '../safety/api';
 import { MyRequestsScreen } from '../screens/requests/my-requests-screen';
 import { NotificationsScreen } from '../screens/notifications/notifications-screen';
@@ -247,12 +246,6 @@ export function AppNavigator({
   ]);
   const current = stack[stack.length - 1];
 
-  const store = useMemo(() => createRequestStore(), []);
-  const [requests, setRequests] = useState<readonly StoredRequest[]>(() =>
-    store.list(),
-  );
-  useEffect(() => store.subscribe(() => setRequests(store.list())), [store]);
-
   const navigate = useCallback(
     (
       route: AppStackEntry['route'],
@@ -285,30 +278,6 @@ export function AppNavigator({
     [navigate, goBack],
   );
 
-  const handleRequested = useCallback(
-    (request: RideRequest, ride: RideSummary) => {
-      store.add({
-        id: request.id,
-        rideId: request.rideId,
-        ride,
-        requestedSeats: request.requestedSeats,
-        status: request.status,
-        createdAt: request.createdAt,
-      });
-    },
-    [store],
-  );
-
-  // Phase 3.21: a participant-initiated cancellation (withdraw/cancel) is
-  // reflected in the session-local store immediately, matching the backend's
-  // authoritative CANCELLED status.
-  const handleRequestCancelled = useCallback(
-    (requestId: string) => {
-      store.updateStatus(requestId, 'CANCELLED');
-    },
-    [store],
-  );
-
   let content: ReactNode;
   switch (current.route) {
     case ROUTES.RIDES:
@@ -328,20 +297,12 @@ export function AppNavigator({
           ride={current.params.ride}
           userId={userId}
           rideApi={api}
-          onRequested={handleRequested}
           routingProvider={routing}
         />
       );
       break;
     case ROUTES.REQUESTS:
-      content = (
-        <MyRequestsScreen
-          navigation={navigation}
-          requests={requests}
-          rideApi={api}
-          onCancelled={handleRequestCancelled}
-        />
-      );
+      content = <MyRequestsScreen navigation={navigation} rideApi={api} />;
       break;
     case ROUTES.NOTIFICATIONS:
       content = <NotificationsScreen navigation={navigation} rideApi={api} />;
