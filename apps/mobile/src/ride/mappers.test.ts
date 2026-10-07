@@ -8,6 +8,7 @@ import {
   mapMatchedRide,
   mapNotification,
   mapNotificationList,
+  mapParticipantRideRequest,
   mapRejectedRideRequest,
   mapRideRequest,
 } from './mappers';
@@ -21,6 +22,7 @@ import {
   ISO_STRING,
   matchedRideDto,
   notificationDto,
+  participantRideRequestDto,
 } from '../../tests/fixtures';
 
 describe('mapDiscoveredRide', () => {
@@ -136,6 +138,38 @@ describe('mapMatchedRide', () => {
         threshold: 5000,
       },
     ]);
+  });
+});
+
+describe('mapParticipantRideRequest', () => {
+  it('maps the request and its ride, parsing dates', () => {
+    const mapped = mapParticipantRideRequest(participantRideRequestDto());
+    expect(mapped.request.id).toBe('request-1');
+    expect(mapped.request.rideId).toBe('ride-1');
+    expect(mapped.request.status).toBe('PENDING');
+    expect(mapped.request.createdAt).toEqual(new Date(ISO_STRING));
+    expect(mapped.request.resolvedAt).toBeNull();
+    expect(mapped.ride.id).toBe('ride-1');
+    expect(mapped.ride.availableSeats).toBe(3);
+    expect(mapped.ride.departureDateTime).toEqual(new Date(ISO_STRING));
+  });
+
+  it('parses resolvedAt when present', () => {
+    const mapped = mapParticipantRideRequest(
+      participantRideRequestDto({
+        request: {
+          id: 'request-1',
+          rideId: 'ride-1',
+          requestedSeats: 1,
+          status: 'ACCEPTED',
+          createdAt: ISO_STRING,
+          resolvedAt: '2026-08-18T11:00:00.000Z',
+        },
+      }),
+    );
+    expect(mapped.request.resolvedAt).toEqual(
+      new Date('2026-08-18T11:00:00.000Z'),
+    );
   });
 });
 

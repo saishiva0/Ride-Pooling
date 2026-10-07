@@ -111,3 +111,25 @@ RideRequestInput (rideId, requesterId, requestedSeats?)
 Request creation is READ-ONLY toward Ride/Participant data and ends at a
 `PENDING` request — no seat reservation, no participants, no accept/reject,
 no notifications, no API. Those are later phases.
+
+## Participant read path (V1 rider read path)
+
+```
+GET /api/v1/rides/requests/mine  → listMyRideRequests (application/list-my-ride-requests.ts)
+GET /api/v1/rides/joined         → listJoinedRides    (application/list-joined-rides.ts)
+GET /api/v1/rides/:rideId        → getCreatorRide     (creator OR confirmed participant)
+```
+
+- `list-my-ride-requests.ts` lists the authenticated participant's own
+  requests (any status), oldest first, each with the requested ride, creator,
+  pickup/destination, ride status, live `availableSeats`, and the request's
+  status/timestamps. It is the server-authoritative source for the mobile
+  "My Requests" screen (persisted — survives an app restart).
+- `list-joined-rides.ts` lists rides where the user is a CONFIRMED
+  participant (any ride status), earliest departure first.
+- `get-ride-detail.ts` keeps creator authorization intact and ORs in an
+  explicit confirmed-participant membership rule
+  (`hasConfirmedParticipation`). Missing rides still 404; foreign rides still 403. The mobile participant flow reuses this same read.
+- All three are READ-ONLY, depend only on the injected transaction port, and
+  reuse the shared `CreatorRide`/`toCreatorRide` shape (never duplicated). No
+  new lifecycle state, table, or notification/realtime event was introduced.

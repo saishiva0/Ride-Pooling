@@ -79,6 +79,28 @@ describe('RideHistoryScreen', () => {
     expect(extractText(root.toJSON())).toContain('COMPLETED');
   });
 
+  it('includes the participant’s completed joined rides (server-authoritative history)', async () => {
+    const root = await renderAndSettle(
+      <RideHistoryScreen
+        navigation={fakeNavigation()}
+        rideApi={fakeRideApi({
+          listMyRides: vi.fn(async () => []),
+          listJoinedRides: vi.fn(async () => [
+            creatorRide({ id: 'ride-joined', status: 'COMPLETED' }),
+          ]),
+        })}
+      />,
+    );
+    const text = extractText(root.toJSON());
+    expect(text).toContain('COMPLETED');
+    const buttons = root.root.findAll(
+      (node) =>
+        typeof node.type === 'string' &&
+        node.props.accessibilityLabel === 'View ride-joined',
+    );
+    expect(buttons).toHaveLength(1);
+  });
+
   it('navigates to ride details for a completed ride', async () => {
     const navigation = fakeNavigation();
     const root = await renderAndSettle(

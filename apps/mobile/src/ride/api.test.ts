@@ -12,6 +12,7 @@ import {
   discoveredRideDto,
   matchedRideDto,
   notificationDto,
+  participantRideRequestDto,
   publishedRideDto,
   startedRideDto,
 } from '../../tests/fixtures';
@@ -252,6 +253,57 @@ describe('RideApi', () => {
     expect(rides[0].id).toBe('ride-1');
     expect(rides[0].availableSeats).toBe(3);
     expect(rides[0].departureDateTime).toBeInstanceOf(Date);
+  });
+
+  it('lists the participant requests at GET /rides/requests/mine', async () => {
+    const { client, calls } = fakeClient({
+      '/rides/requests/mine': [participantRideRequestDto()],
+    });
+    const api = createRideApi(client);
+    const requests = await api.listMyRequests();
+    expect(calls[0].path).toBe('/rides/requests/mine');
+    expect(calls[0].options?.method).toBeUndefined(); // GET
+    expect(requests[0].request).toMatchObject({
+      id: 'request-1',
+      rideId: 'ride-1',
+      status: 'PENDING',
+    });
+    expect(requests[0].request.createdAt).toBeInstanceOf(Date);
+    expect(requests[0].ride.id).toBe('ride-1');
+    expect(requests[0].ride.availableSeats).toBe(3);
+  });
+
+  it('parses a resolvedAt date when present', async () => {
+    const { client } = fakeClient({
+      '/rides/requests/mine': [
+        participantRideRequestDto({
+          request: {
+            id: 'request-1',
+            rideId: 'ride-1',
+            requestedSeats: 1,
+            status: 'ACCEPTED',
+            createdAt: '2026-08-18T10:05:00.000Z',
+            resolvedAt: '2026-08-18T10:30:00.000Z',
+          },
+        }),
+      ],
+    });
+    const api = createRideApi(client);
+    const requests = await api.listMyRequests();
+    expect(requests[0].request.resolvedAt).toBeInstanceOf(Date);
+  });
+
+  it('lists joined rides at GET /rides/joined', async () => {
+    const { client, calls } = fakeClient({
+      '/rides/joined': [creatorRideDto({ status: 'CONFIRMED' })],
+    });
+    const api = createRideApi(client);
+    const rides = await api.listJoinedRides();
+    expect(calls[0].path).toBe('/rides/joined');
+    expect(calls[0].options?.method).toBeUndefined(); // GET
+    expect(rides[0].id).toBe('ride-1');
+    expect(rides[0].status).toBe('CONFIRMED');
+    expect(rides[0].availableSeats).toBe(3);
   });
 
   it('fetches a creator ride detail at GET /rides/:rideId', async () => {

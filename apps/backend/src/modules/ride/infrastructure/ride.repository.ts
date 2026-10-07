@@ -903,3 +903,142 @@ export async function listCreatorRides(
     availableSeats: ride.totalSeats - (seatsByRide.get(ride.id) ?? 0),
   }));
 }
+
+// ---------------------------------------------------------------------------
+// Participant read path persistence (V1 rider read path)
+// ---------------------------------------------------------------------------
+//
+// Read-only functions for the authenticated participant: their own ride
+// requests (the server-authoritative "My Requests" source) and the rides they
+// are a CONFIRMED participant of. They contain NO business rules —
+// authorization lives in the application services. Seat availability is
+// computed with the same formula the rest of the module uses
+// (available = totalSeats − CONFIRMED participants' allocated seats), read
+// inside the same transaction as the rows so the view is consistent.
+
+/**
+ * Confirmed seat totals per ride, keyed by ride id — the shared read helper
+ * mirroring the seat formula used by discovery/requests/creator reads.
+ */
+async function confirmedSeatsByRideId(
+  tx: Prisma.TransactionClient,
+  rideIds: readonly string[],
+): Promise<Map<string, number>> {
+  if (rideIds.length === 0) {
+    return new Map();
+  }
+  const seats = await tx.rideParticipant.groupBy({
+    by: ['rideId'],
+    where: {
+      rideId: { in: [...rideIds] },
+      status: ParticipantStatus.CONFIRMED,
+    },
+    _sum: { seatsAllocated: true },
+  });
+  return new Map(
+    seats.map((row) => [row.rideId, row._sum.seatsAllocated ?? 0]),
+  );
+}
+
+/** A participant's own ride request joined with its ride view + seats. */
+export interface PersistedParticipantRideRequest {
+  request: PersistedRideRequest;
+  ride: PersistedRideRecord;
+  availableSeats: number;
+}
+
+/**
+ * Lists the authenticated participant's own requests (any status), oldest
+ * first, each with the requested ride, its creator, locations, and live seat
+ * availability. Read-only.
+ */
+export async function listParticipantRideRequests(
+  tx: Prisma.TransactionClient,
+  userId: string,
+): Promise<PersistedParticipantRideRequest[]> {
+  const requests = await tx.rideRequest.findMany({
+    where: { userId },
+    orderBy: { createdAt: 'asc' },
+    select: {
+      id: true,
+      rideId: true,
+      userId: true,
+      requestedSeats: true,
+      status: true,
+      createdAt: true,
+      updatedAt: true,
+      resolvedAt: true,
+    },
+  });
+  if (requests.length === 0) {
+    return [];
+  }
+  const rideIds = [...new Set(requests.map((request) => request.rideId))];
+  const rides = await tx.ride.findMany({
+    where: { id: { in: rideIds } },
+    ...RIDE_WITH_RELATIONS,
+  });
+  const seatsByRide = await confirmedSeatsByRideId(tx, rideIds);
+  const rideById = new Map(rides.map((ride) => [ride.id, ride]));
+  const result: PersistedParticipantRideRequest[] = [];
+  for (const request of requests) {
+    const ride = rideById.get(request.rideId);
+    if (!ride) {
+      continue;
+    }
+    result.push({
+      request,
+      ride,
+      availableSeats: ride.totalSeats - (seatsByRide.get(ride.id) ?? 0),
+    });
+  }
+  return result;
+}
+
+/**
+ * Lists the rides the user is a CONFIRMED participant of (any ride status),
+ * ordered by departure time ascending, with live seat availability. A user
+ * may hold several confirmed participations; each ride appears once.
+ * Read-only.
+ */
+export async function listConfirmedParticipantRides(
+  tx: Prisma.TransactionClient,
+  userId: string,
+): Promise<PersistedCreatorRide[]> {
+  const participations = await tx.rideParticipant.findMany({
+    where: { userId, status: ParticipantStatus.CONFIRMED },
+    select: { rideId: true },
+    orderBy: { joinedAt: 'asc' },
+  });
+  const rideIds = [...new Set(participations.map((row) => row.rideId))];
+  if (rideIds.length === 0) {
+    return [];
+  }
+  const rides = await tx.ride.findMany({
+    where: { id: { in: rideIds } },
+    orderBy: { departureDateTime: 'asc' },
+    ...RIDE_WITH_RELATIONS,
+  });
+  const seatsByRide = await confirmedSeatsByRideId(tx, rideIds);
+  return rides.map((ride) => ({
+    ride,
+    availableSeats: ride.totalSeats - (seatsByRide.get(ride.id) ?? 0),
+  }));
+}
+
+/**
+ * True when the user has a CONFIRMED `RideParticipant` row on the ride — the
+ * explicit membership rule that lets a confirmed participant read a ride they
+ * joined (without weakening creator authorization). Read-only.
+ */
+export async function hasConfirmedParticipation(
+  tx: Prisma.TransactionClient,
+  rideId: string,
+  userId: string,
+): Promise<boolean> {
+  const participant = await tx.rideParticipant.findFirst({
+    where: { rideId, userId, status: ParticipantStatus.CONFIRMED },
+    select: { id: true },
+  });
+  return participant !== null;
+}

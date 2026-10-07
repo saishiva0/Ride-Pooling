@@ -25,6 +25,8 @@ import { cancelRide } from '../application/cancel-ride.js';
 import { completeRide } from '../application/complete-ride.js';
 import { getCreatorRide } from '../application/get-ride-detail.js';
 import { listCreatorRides } from '../application/list-creator-rides.js';
+import { listJoinedRides } from '../application/list-joined-rides.js';
+import { listMyRideRequests } from '../application/list-my-ride-requests.js';
 import { publishRide } from '../application/publish-ride.js';
 import { startRide } from '../application/start-ride.js';
 import {
@@ -208,7 +210,11 @@ export async function listCreatorRidesHandler(
   sendData(res, 200, rides);
 }
 
-/** GET /api/v1/rides/:rideId — creator-only detail (rides the actor created). */
+/**
+ * GET /api/v1/rides/:rideId — readable by the ride's creator OR a CONFIRMED
+ * participant (V1 rider read path). The authorization rule lives in the use
+ * case; the actor id always comes from authentication.
+ */
 export async function getCreatorRideHandler(
   req: Request,
   res: Response,
@@ -221,6 +227,28 @@ export async function getCreatorRideHandler(
     actorId: identity.userId,
   });
   sendData(res, 200, ride);
+}
+
+/** GET /api/v1/rides/requests/mine — the authenticated participant's requests. */
+export async function listMyRideRequestsHandler(
+  _req: Request,
+  res: Response,
+): Promise<void> {
+  const identity = getAuthenticatedUser(res);
+
+  const requests = await listMyRideRequests({ userId: identity.userId });
+  sendData(res, 200, requests);
+}
+
+/** GET /api/v1/rides/joined — rides the authenticated user is confirmed on. */
+export async function listJoinedRidesHandler(
+  _req: Request,
+  res: Response,
+): Promise<void> {
+  const identity = getAuthenticatedUser(res);
+
+  const rides = await listJoinedRides({ userId: identity.userId });
+  sendData(res, 200, rides);
 }
 
 /** POST /api/v1/rides/:rideId/publish — creator only (DRAFT → PUBLISHED). */

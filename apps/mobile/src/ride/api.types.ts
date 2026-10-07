@@ -165,10 +165,28 @@ export interface CompletedRideDto {
 }
 
 /** `CreatorRide` (backend `creator-ride-read.ts`): the creator's own ride with
- * live seat availability (GET /rides/mine, GET /rides/:rideId). */
+ * live seat availability (GET /rides/mine, GET /rides/:rideId, GET /rides/joined). */
 export interface CreatorRideDto extends CreatedRideDto {
   /** totalSeats − CONFIRMED participants' allocated seats (never negative). */
   availableSeats: number;
+}
+
+/** The participant's own request within `ParticipantRideRequest`
+ * (backend `participant-ride-read.ts`). */
+export interface ParticipantRideRequestInfoDto {
+  id: string;
+  rideId: string;
+  requestedSeats: number;
+  status: RideRequestStatusValue;
+  createdAt: string;
+  resolvedAt: string | null;
+}
+
+/** `ParticipantRideRequest` (backend `participant-ride-read.ts`):
+ * a participant's own request plus its ride (GET /rides/requests/mine). */
+export interface ParticipantRideRequestDto {
+  request: ParticipantRideRequestInfoDto;
+  ride: CreatorRideDto;
 }
 
 /** `FactorResult` (backend `domain/matching/types.ts`). */

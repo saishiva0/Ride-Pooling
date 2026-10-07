@@ -1,15 +1,13 @@
 /**
- * Session-local ride request store (Phase 3.15 — MOBILE RIDE PARTICIPANT FLOW).
+ * Session-local ride request store (Phase 3.15 — MOBILE RIDE PARTICIPANT FLOW;
+ * superseded as authoritative by the V1 rider read path).
  *
- * The backend exposes request CREATION, decisions, and notifications — but NO
- * "list my ride requests" endpoint. Until such an endpoint exists, the "My
- * Requests" screen reflects what THIS session has created, tracked in memory.
- *
- * This is a deliberate, documented limitation (never an invented endpoint):
- * the store is in-memory only, resets on app restart, and is NOT authoritative
- * — the backend remains the source of truth for request state. The store is
- * framework-free (plain subscribe/notify) so it is trivially testable and can
- * be swapped for a server-backed list when the API exists.
+ * The backend now exposes `GET /api/v1/rides/requests/mine`, and the "My
+ * Requests" screen loads its state from that endpoint (`my-requests-screen.tsx`)
+ * — so this in-memory store is NO LONGER the source of truth and is not wired
+ * into the navigator. It remains available as an optional UI cache (plain
+ * subscribe/notify, framework-free) and is retained for compatibility; it must
+ * never be treated as authoritative for request state.
  */
 import type { RideRequestStatusValue } from './api.types';
 import type { RideSummary } from './types';

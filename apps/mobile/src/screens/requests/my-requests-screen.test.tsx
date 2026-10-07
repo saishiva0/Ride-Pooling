@@ -1,33 +1,58 @@
 import { describe, expect, it, vi } from 'vitest';
-import { renderAndSettle, extractText, press } from '../../../tests/render';
+import {
+  renderAndSettle,
+  extractText,
+  flushAsync,
+  press,
+} from '../../../tests/render';
 import {
   fakeNavigation,
   fakeRideApi,
-  rideSummary,
+  participantRideRequest,
 } from '../../../tests/fixtures';
+import { MobileError } from '../../api/errors';
 import { ROUTES } from '../../navigation/routes';
-import type { StoredRequest } from '../../ride/request-store';
+import type { ParticipantRideRequest } from '../../ride/types';
 import { MyRequestsScreen } from './my-requests-screen';
 
-function storedRequest(overrides: Partial<StoredRequest> = {}): StoredRequest {
-  return {
-    id: 'request-1',
-    rideId: 'ride-1',
-    ride: rideSummary(),
-    requestedSeats: 2,
-    status: 'PENDING',
-    createdAt: new Date('2026-08-18T10:00:00.000Z'),
-    ...overrides,
-  };
-}
-
 describe('MyRequestsScreen', () => {
+  it('loads persisted requests from the backend on mount', async () => {
+    const listMyRequests = vi.fn(
+      async (): Promise<ParticipantRideRequest[]> => [participantRideRequest()],
+    );
+    const root = await renderAndSettle(
+      <MyRequestsScreen
+        navigation={fakeNavigation()}
+        rideApi={fakeRideApi({ listMyRequests })}
+      />,
+    );
+    expect(listMyRequests).toHaveBeenCalledTimes(1);
+    const text = extractText(root.toJSON());
+    expect(text).toContain('MG Road → Koramangala');
+    expect(text).toContain('Status: PENDING');
+    expect(text).toContain('Ride status: PUBLISHED');
+  });
+
+  it('shows a loading state while the request is in flight', async () => {
+    const listMyRequests = vi.fn(
+      () => new Promise<ParticipantRideRequest[]>(() => {}),
+    );
+    const root = await renderAndSettle(
+      <MyRequestsScreen
+        navigation={fakeNavigation()}
+        rideApi={fakeRideApi({ listMyRequests })}
+      />,
+    );
+    expect(extractText(root.toJSON())).toContain('Loading your requests...');
+  });
+
   it('shows an empty state when there are no requests', async () => {
     const root = await renderAndSettle(
       <MyRequestsScreen
         navigation={fakeNavigation()}
-        requests={[]}
-        rideApi={fakeRideApi()}
+        rideApi={fakeRideApi({
+          listMyRequests: vi.fn(async () => []),
+        })}
       />,
     );
     expect(extractText(root.toJSON())).toContain(
@@ -35,46 +60,89 @@ describe('MyRequestsScreen', () => {
     );
   });
 
-  it('lists session-local requests with their last-known status', async () => {
-    const navigation = fakeNavigation();
+  it('renders a normalized error and retries', async () => {
+    const listMyRequests = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new MobileError('network', 'Network request failed'),
+      )
+      .mockResolvedValueOnce([participantRideRequest()]);
     const root = await renderAndSettle(
       <MyRequestsScreen
-        navigation={navigation}
-        requests={[storedRequest()]}
-        rideApi={fakeRideApi()}
+        navigation={fakeNavigation()}
+        rideApi={fakeRideApi({ listMyRequests })}
       />,
     );
-    const text = extractText(root.toJSON());
-    expect(text).toContain('MG Road → Koramangala');
-    expect(text).toContain('Aug 18, 2026 · 10:00');
-    expect(text).toContain('2 seats');
-    expect(text).toContain('Status: PENDING');
+    expect(extractText(root.toJSON())).toContain(
+      'Network request failed. Check your connection and try again.',
+    );
+    await press(root, { accessibilityLabel: 'Try again' });
+    await flushAsync();
+    expect(listMyRequests).toHaveBeenCalledTimes(2);
+    expect(extractText(root.toJSON())).toContain('MG Road → Koramangala');
+  });
+
+  it('shows the persisted state after a simulated remount (survives restart)', async () => {
+    const persisted = [
+      participantRideRequest({
+        request: {
+          id: 'request-9',
+          rideId: 'ride-1',
+          requestedSeats: 2,
+          status: 'ACCEPTED',
+          createdAt: new Date('2026-08-18T10:00:00.000Z'),
+          resolvedAt: new Date('2026-08-18T10:30:00.000Z'),
+        },
+      }),
+    ];
+    // First mount simulates an empty local session; the server returns the
+    // persisted row, so the second mount (after restart) renders it too.
+    const listMyRequests = vi.fn(async () => persisted);
+    const first = await renderAndSettle(
+      <MyRequestsScreen
+        navigation={fakeNavigation()}
+        rideApi={fakeRideApi({ listMyRequests })}
+      />,
+    );
+    expect(extractText(first.toJSON())).toContain('Status: ACCEPTED');
+
+    const second = await renderAndSettle(
+      <MyRequestsScreen
+        navigation={fakeNavigation()}
+        rideApi={fakeRideApi({ listMyRequests })}
+      />,
+    );
+    expect(listMyRequests).toHaveBeenCalledTimes(2);
+    expect(extractText(second.toJSON())).toContain('Status: ACCEPTED');
   });
 
   it('navigates to ride details from a request', async () => {
     const navigation = fakeNavigation();
-    const ride = rideSummary();
     const root = await renderAndSettle(
       <MyRequestsScreen
         navigation={navigation}
-        requests={[storedRequest({ ride })]}
-        rideApi={fakeRideApi()}
+        rideApi={fakeRideApi({
+          listMyRequests: vi.fn(async () => [participantRideRequest()]),
+        })}
       />,
     );
     await press(root, { accessibilityLabel: 'View ride' });
-    expect(navigation.navigate).toHaveBeenCalledWith(ROUTES.RIDE_DETAILS, {
-      ride,
-    });
+    expect(navigation.navigate).toHaveBeenCalledWith(
+      ROUTES.RIDE_DETAILS,
+      expect.objectContaining({
+        ride: expect.objectContaining({ id: 'ride-1' }),
+      }),
+    );
   });
 
-  it('withdraws a PENDING request and reports it as cancelled', async () => {
-    const navigation = fakeNavigation();
-    const rideApi = fakeRideApi();
+  it('withdraws a PENDING request and reloads from the backend', async () => {
+    const rideApi = fakeRideApi({
+      listMyRequests: vi.fn(async () => [participantRideRequest()]),
+    });
     const onCancelled = vi.fn();
     const root = await renderAndSettle(
       <MyRequestsScreen
-        navigation={navigation}
-        requests={[storedRequest()]}
+        navigation={fakeNavigation()}
         rideApi={rideApi}
         onCancelled={onCancelled}
       />,
@@ -89,13 +157,24 @@ describe('MyRequestsScreen', () => {
   });
 
   it('cancels an ACCEPTED participation and reports it as cancelled', async () => {
-    const navigation = fakeNavigation();
-    const rideApi = fakeRideApi();
+    const rideApi = fakeRideApi({
+      listMyRequests: vi.fn(async () => [
+        participantRideRequest({
+          request: {
+            id: 'request-1',
+            rideId: 'ride-1',
+            requestedSeats: 1,
+            status: 'ACCEPTED',
+            createdAt: new Date('2026-08-18T10:00:00.000Z'),
+            resolvedAt: new Date('2026-08-18T10:30:00.000Z'),
+          },
+        }),
+      ]),
+    });
     const onCancelled = vi.fn();
     const root = await renderAndSettle(
       <MyRequestsScreen
-        navigation={navigation}
-        requests={[storedRequest({ status: 'ACCEPTED' })]}
+        navigation={fakeNavigation()}
         rideApi={rideApi}
         onCancelled={onCancelled}
       />,
@@ -115,8 +194,20 @@ describe('MyRequestsScreen', () => {
     const root = await renderAndSettle(
       <MyRequestsScreen
         navigation={fakeNavigation()}
-        requests={[storedRequest({ status: 'REJECTED' })]}
-        rideApi={fakeRideApi()}
+        rideApi={fakeRideApi({
+          listMyRequests: vi.fn(async () => [
+            participantRideRequest({
+              request: {
+                id: 'request-1',
+                rideId: 'ride-1',
+                requestedSeats: 1,
+                status: 'REJECTED',
+                createdAt: new Date('2026-08-18T10:00:00.000Z'),
+                resolvedAt: new Date('2026-08-18T10:30:00.000Z'),
+              },
+            }),
+          ]),
+        })}
       />,
     );
     const text = extractText(root.toJSON());

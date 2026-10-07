@@ -28,6 +28,7 @@ import type {
   DiscoveredRideDto,
   MatchedRideDto,
   NotificationDto,
+  ParticipantRideRequestDto,
   PublishedRideDto,
   StartedRideDto,
 } from '../src/ride/api.types';
@@ -38,6 +39,7 @@ import type {
   CompletedRide,
   CreatedRide,
   CreatorRide,
+  ParticipantRideRequest,
   PublishedRide,
   RideNotification,
   RideRequest,
@@ -122,6 +124,23 @@ export function creatorRideDto(
   return {
     ...createdRideDto(),
     availableSeats: 3,
+    ...overrides,
+  };
+}
+
+export function participantRideRequestDto(
+  overrides: Partial<ParticipantRideRequestDto> = {},
+): ParticipantRideRequestDto {
+  return {
+    request: {
+      id: 'request-1',
+      rideId: 'ride-1',
+      requestedSeats: 1,
+      status: 'PENDING',
+      createdAt: ISO_STRING,
+      resolvedAt: null,
+    },
+    ride: creatorRideDto({ status: 'PUBLISHED' }),
     ...overrides,
   };
 }
@@ -302,6 +321,27 @@ export function creatorRide(overrides: Partial<CreatorRide> = {}): CreatorRide {
   };
 }
 
+export function participantRideRequest(
+  overrides: Partial<ParticipantRideRequest> = {},
+): ParticipantRideRequest {
+  const dto = participantRideRequestDto();
+  return {
+    request: {
+      id: dto.request.id,
+      rideId: dto.request.rideId,
+      requestedSeats: dto.request.requestedSeats,
+      status: dto.request.status,
+      createdAt: new Date(dto.request.createdAt),
+      resolvedAt:
+        dto.request.resolvedAt === null
+          ? null
+          : new Date(dto.request.resolvedAt),
+    },
+    ride: creatorRide({ status: 'PUBLISHED' }),
+    ...overrides,
+  };
+}
+
 export function rideRequest(overrides: Partial<RideRequest> = {}): RideRequest {
   const dto = createdRideRequestDto();
   return {
@@ -477,6 +517,8 @@ export function fakeRideApi(overrides: Partial<RideApi> = {}): RideApi {
     matchRides: vi.fn(async () => []),
     createRide: vi.fn(async (): Promise<CreatedRide> => createdRide()),
     listMyRides: vi.fn(async (): Promise<CreatorRide[]> => []),
+    listMyRequests: vi.fn(async (): Promise<ParticipantRideRequest[]> => []),
+    listJoinedRides: vi.fn(async (): Promise<CreatorRide[]> => []),
     getRideDetail: vi.fn(async (): Promise<CreatorRide> => creatorRide()),
     requestSeats: vi.fn(async (): Promise<RideRequest> => rideRequest()),
     acceptRequest: vi.fn(async (): Promise<AcceptedRideRequest> => ({

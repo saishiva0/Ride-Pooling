@@ -85,6 +85,7 @@ function fakePersistence(
   return {
     listCreatorRides: vi.fn(),
     findCreatorRide: vi.fn(),
+    hasConfirmedParticipation: vi.fn().mockResolvedValue(false),
     ...overrides,
   };
 }
@@ -196,7 +197,7 @@ describe('getCreatorRide', () => {
     });
   });
 
-  it('throws Authorization when the ride belongs to someone else (no leak)', async () => {
+  it('throws Authorization when the ride belongs to someone else and the actor has not joined', async () => {
     const persistence = fakePersistence({
       findCreatorRide: vi.fn().mockResolvedValue(
         persistedRide({
@@ -211,6 +212,7 @@ describe('getCreatorRide', () => {
           },
         }),
       ),
+      hasConfirmedParticipation: vi.fn().mockResolvedValue(false),
     });
 
     const promise = run(getCreatorRide, persistence, {
@@ -222,6 +224,43 @@ describe('getCreatorRide', () => {
       code: 'AUTHORIZATION_ERROR',
       statusCode: 403,
     });
+    expect(persistence.hasConfirmedParticipation).toHaveBeenCalledWith(
+      rideId,
+      creatorId,
+    );
+  });
+
+  it('allows a confirmed participant to read a ride they did not create', async () => {
+    const persistence = fakePersistence({
+      findCreatorRide: vi.fn().mockResolvedValue(
+        persistedRide({
+          creatorId: 'someone-else',
+          creator: {
+            id: 'someone-else',
+            name: 'Someone Else',
+            createdAt: new Date('2026-08-18T10:00:00.000Z'),
+            updatedAt: new Date('2026-08-18T10:00:00.000Z'),
+            phone: '+919999999999',
+            email: null,
+          },
+        }),
+      ),
+      hasConfirmedParticipation: vi.fn().mockResolvedValue(true),
+    });
+
+    const ride = await run(getCreatorRide, persistence, {
+      rideId,
+      actorId: 'participant-1',
+    });
+
+    expect(ride).toMatchObject({
+      id: rideId,
+      creator: { id: 'someone-else' },
+    });
+    expect(persistence.hasConfirmedParticipation).toHaveBeenCalledWith(
+      rideId,
+      'participant-1',
+    );
   });
 
   it('rejects malformed input before touching the transaction', async () => {

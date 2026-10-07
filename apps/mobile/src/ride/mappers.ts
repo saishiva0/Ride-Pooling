@@ -20,6 +20,7 @@ import type {
   MatchedRideDto,
   NotificationDto,
   NotificationListResultDto,
+  ParticipantRideRequestDto,
   PublishedRideDto,
   RejectedRideRequestDto,
   StartedRideDto,
@@ -33,6 +34,7 @@ import type {
   CreatorRide,
   FactorResult,
   MatchedRide,
+  ParticipantRideRequest,
   PublishedRide,
   RejectedRideRequest,
   RideNotification,
@@ -202,6 +204,26 @@ export function mapCreatorRide(dto: CreatorRideDto): CreatorRide {
   return {
     ...mapCreatedRide(dto),
     availableSeats: dto.availableSeats,
+  };
+}
+
+/** Maps a participant-request payload (own request + its ride). */
+export function mapParticipantRideRequest(
+  dto: ParticipantRideRequestDto,
+): ParticipantRideRequest {
+  return {
+    request: {
+      id: dto.request.id,
+      rideId: dto.request.rideId,
+      requestedSeats: dto.request.requestedSeats,
+      status: dto.request.status,
+      createdAt: parseIsoDate(dto.request.createdAt),
+      resolvedAt:
+        dto.request.resolvedAt === null
+          ? null
+          : parseIsoDate(dto.request.resolvedAt),
+    },
+    ride: mapCreatorRide(dto.ride),
   };
 }
 
