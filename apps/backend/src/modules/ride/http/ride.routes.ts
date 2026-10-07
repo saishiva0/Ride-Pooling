@@ -21,6 +21,8 @@ import {
   discoverRidesHandler,
   getCreatorRideHandler,
   listCreatorRidesHandler,
+  listJoinedRidesHandler,
+  listMyRideRequestsHandler,
   publishRideHandler,
   rejectRideRequestHandler,
   startRideHandler,
@@ -49,10 +51,20 @@ export function createRideRouter(options: RideRouterOptions): Router {
     requireAuth,
     asyncHandler(discoverRidesHandler),
   );
-  // `/rides/mine` MUST be registered before `/rides/:rideId` so the literal
-  // path wins over the parameterized one (Express matches in registration
-  // order) — see Phase 3.17 canonical spec §5.
+  // Literal `/rides/*` reads MUST be registered before `/rides/:rideId` so
+  // they win over the parameterized route (Express matches in registration
+  // order) — see Phase 3.17 canonical spec §5 and the V1 rider read path.
   router.get('/rides/mine', requireAuth, asyncHandler(listCreatorRidesHandler));
+  router.get(
+    '/rides/requests/mine',
+    requireAuth,
+    asyncHandler(listMyRideRequestsHandler),
+  );
+  router.get(
+    '/rides/joined',
+    requireAuth,
+    asyncHandler(listJoinedRidesHandler),
+  );
   router.get(
     '/rides/:rideId',
     requireAuth,

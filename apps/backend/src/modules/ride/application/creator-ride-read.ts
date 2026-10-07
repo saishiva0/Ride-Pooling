@@ -13,6 +13,7 @@
 import { prisma } from '../../../lib/prisma.js';
 import {
   findCreatorRide,
+  hasConfirmedParticipation,
   listCreatorRides,
   type PersistedCreatorRide,
 } from '../infrastructure/ride.repository.js';
@@ -42,6 +43,12 @@ export interface CreatorRideReadPersistence {
   listCreatorRides(creatorId: string): Promise<PersistedCreatorRide[]>;
   /** Looks up a single ride with its live seat sum; null when missing. */
   findCreatorRide(rideId: string): Promise<PersistedCreatorRide | null>;
+  /**
+   * True when the user is a CONFIRMED participant of the ride (V1 rider read
+   * path). This is the explicit participant membership rule — creator
+   * authorization is not weakened, it is ORed with a confirmed participation.
+   */
+  hasConfirmedParticipation(rideId: string, userId: string): Promise<boolean>;
 }
 
 /** Injected dependency so the read use cases are unit-testable without DB. */
@@ -59,6 +66,8 @@ export function defaultCreatorRideReadDependencies(): RideCreatorReadDependencie
         work({
           listCreatorRides: (creatorId) => listCreatorRides(tx, creatorId),
           findCreatorRide: (rideId) => findCreatorRide(tx, rideId),
+          hasConfirmedParticipation: (rideId, userId) =>
+            hasConfirmedParticipation(tx, rideId, userId),
         }),
       ),
   };
